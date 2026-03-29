@@ -1,0 +1,238 @@
+---
+title: "Playback options"
+description: "Control playback behavior: speed, looping, start time, chapters, and more"
+---
+
+These options control how mpv begins, progresses through, and ends playback of media files.
+
+## Start and end positions
+
+<ParamField path="--start" type="relative time">
+  Seek to a position before playback begins.
+
+  **Time formats:**
+  - `[[hh:]mm:]ss[.ms]` — absolute timestamp
+  - `-[[hh:]mm:]ss[.ms]` — relative from the end of the file
+  - `pp%` — percentage position (0–100)
+  - `#c` — chapter number (chapters start at 1)
+  - `none` — reset any previously set value
+
+  ```bash
+  mpv --start=+56 file.mkv          # 56 seconds in
+  mpv --start=01:10:00 file.mkv     # 1 hour 10 minutes in
+  mpv --start=50% file.mkv          # seek to middle
+  mpv --start=-56 file.mkv          # 56 seconds before end
+  mpv --start='#2' file.mkv         # start at chapter 2
+  ```
+</ParamField>
+
+<ParamField path="--end" type="relative time">
+  Stop playback at the given position. Uses the same format as `--start`.
+
+  ```bash
+  mpv --start=30 --end=40 file.mkv          # play seconds 30–40 then quit
+  mpv --start='#2' --end='#4' file.mkv      # play chapters 2 and 3 then quit
+  ```
+</ParamField>
+
+<ParamField path="--length" type="relative time">
+  Stop playback after a given duration relative to `--start`. Uses the same format as `--start`.
+
+  If both `--end` and `--length` are given, playback stops at whichever endpoint comes first.
+
+  ```bash
+  mpv --start=-3:20 --length=10 file.mkv    # play 10s starting 3m20s before end
+  ```
+</ParamField>
+
+<ParamField path="--rebase-start-time" type="yes|no" default="yes">
+  Move the file start time to `00:00:00`. Useful for transport streams that begin at a non-zero timestamp. Disable with `no` if you need to work with the actual timestamps in the file.
+</ParamField>
+
+## Speed and pitch
+
+<ParamField path="--speed" type="float (0.01–100)" default="1.0">
+  Play back at a multiple of normal speed. Values above 1 speed up; values below 1 slow down.
+
+  When `--audio-pitch-correction` is enabled (the default), mpv automatically inserts the `scaletempo2` filter to preserve pitch when playing faster or slower than normal.
+
+  ```bash
+  mpv --speed=2.0 lecture.mp4    # double speed
+  mpv --speed=0.5 video.mkv      # half speed
+  ```
+</ParamField>
+
+<ParamField path="--pause" type="flag">
+  Start the player in the paused state. Playback does not begin until you press the play key (default: `Space`).
+
+  ```bash
+  mpv --pause file.mkv
+  ```
+</ParamField>
+
+## Looping
+
+<ParamField path="--loop-file" type="N|inf|no" default="no">
+  Loop a single file N times. `inf` means loop indefinitely. `no` plays through once.
+
+  `--loop` is an alias for `--loop-file`.
+
+  <Note>
+  `--loop-file` counts the number of seeks to the beginning, not full playthroughs. `--loop-file=1` plays the file **twice** (one seek back).
+  </Note>
+
+  ```bash
+  mpv --loop-file=inf video.mkv   # loop forever
+  mpv --loop=3 video.mkv          # play 4 times total (3 repeats)
+  ```
+</ParamField>
+
+<ParamField path="--loop-playlist" type="N|inf|no|force" default="no">
+  Loop the entire playlist N times. `inf` means loop forever. `force` is like `inf` but continues even if some entries fail to open (useful for web radio with bad connectivity).
+
+  ```bash
+  mpv --loop-playlist=inf *.mp3   # loop through all mp3 files forever
+  ```
+</ParamField>
+
+### A-B loop
+
+<ParamField path="--ab-loop-a" type="time">
+  Set the start point of an A-B loop. When playback reaches `--ab-loop-b`, it seeks back to this point. Use `no` (or leave unset) to disable.
+
+  ```bash
+  mpv --ab-loop-a=1:20 --ab-loop-b=1:45 file.mkv   # loop 25s section
+  ```
+</ParamField>
+
+<ParamField path="--ab-loop-b" type="time">
+  Set the end point of the A-B loop. See `--ab-loop-a`.
+</ParamField>
+
+<ParamField path="--ab-loop-count" type="N|inf" default="inf">
+  How many times to run the A-B loop before ignoring the loop points. `inf` means loop forever. `0` disables the A-B loop even if both points are set.
+</ParamField>
+
+## Chapters
+
+<ParamField path="--chapter" type="chapter">
+  Start playback at the given chapter. Chapters are numbered from 1 in most contexts, but this option uses the same format as `--start='#c'`.
+</ParamField>
+
+<ParamField path="--chapter-merge-threshold" type="integer (ms)" default="100">
+  Threshold in milliseconds for merging nearly-consecutive ordered chapter parts in Matroska files. If the gap between the end of one chapter part and the start of the next is below this value, mpv plays through the boundary without seeking.
+</ParamField>
+
+<ParamField path="--chapter-seek-threshold" type="float (seconds)" default="5.0">
+  When seeking backward within a chapter, if the current position is within this many seconds of the chapter start, the seek goes to the *previous* chapter. Beyond this threshold it goes to the beginning of the current chapter. A negative value always seeks to the previous chapter.
+</ParamField>
+
+## Seeking precision
+
+<ParamField path="--hr-seek" type="no|absolute|default|yes" default="default">
+  Control when to use precise (non-keyframe) seeks. Precise seeks decode from the previous keyframe to the exact target, which is slower but frame-accurate.
+
+  | Value | Behavior |
+  |-------|----------|
+  | `no` | Never use precise seeks |
+  | `absolute` | Precise seeks only for absolute positions (e.g. chapter seeks) |
+  | `default` | Like `absolute`, plus precise seeks in audio-only cases |
+  | `yes` | Always use precise seeks |
+
+  ```bash
+  mpv --hr-seek=yes file.mkv    # always frame-accurate seeking
+  mpv --hr-seek=no file.mkv     # always snap to keyframes (fastest)
+  ```
+</ParamField>
+
+<ParamField path="--hr-seek-framedrop" type="yes|no" default="yes">
+  Allow the decoder to drop frames before the seek target during precise seeks. Enabling this makes precise seeks faster, but can cause issues with filters that modify timestamps or generate new frames (e.g. deinterlacers).
+</ParamField>
+
+## Playlist and idle behavior
+
+<ParamField path="--shuffle" type="flag">
+  Play files in random order when multiple files or a playlist is given.
+
+  ```bash
+  mpv --shuffle *.mp4
+  ```
+</ParamField>
+
+<ParamField path="--keep-open" type="yes|no|always" default="no">
+  Do not exit when reaching the end of the last file in the playlist. Instead, pause the player.
+
+  | Value | Behavior |
+  |-------|----------|
+  | `no` | Exit normally at end of playlist (default) |
+  | `yes` | Pause instead of exiting when the last file ends |
+  | `always` | Pause at the end of every file, including mid-playlist |
+
+  ```bash
+  mpv --keep-open=yes file.mkv    # stay open after playback ends
+  ```
+</ParamField>
+
+<ParamField path="--idle" type="yes|no|once" default="no">
+  Keep mpv running (waiting for input) even when there are no files to play.
+
+  | Value | Behavior |
+  |-------|----------|
+  | `no` | Exit when playlist is empty (default) |
+  | `yes` | Wait indefinitely for input commands |
+  | `once` | Wait at startup, but exit once the first playlist finishes |
+
+  Primarily useful when controlling mpv via IPC or input commands.
+
+  ```bash
+  mpv --idle --input-ipc-server=/tmp/mpv.sock   # daemonized with IPC control
+  ```
+</ParamField>
+
+## Common recipes
+
+<CodeGroup>
+
+```bash Start at a timestamp
+mpv --start=1:23:45 long-movie.mkv
+```
+
+```bash Play only a segment
+mpv --start=5:00 --end=10:00 video.mkv
+```
+
+```bash Loop a section indefinitely
+mpv --ab-loop-a=0:30 --ab-loop-b=1:00 music.flac
+```
+
+```bash Double-speed lecture
+mpv --speed=2.0 lecture.mp4
+```
+
+```bash Shuffle a music directory
+mpv --shuffle --loop-playlist=inf ~/Music/*.flac
+```
+
+```bash Start paused, ready for inspection
+mpv --pause --start=50% file.mkv
+```
+
+</CodeGroup>
+
+## Playlist options
+
+<ParamField path="--playlist-start" type="auto|index" default="auto">
+  Set which playlist entry to start from. `0` is the first entry. `auto` lets the resume mechanism decide.
+
+  ```bash
+  mpv playlist.m3u --playlist-start=5   # start from the 6th entry
+  ```
+</ParamField>
+
+<ParamField path="--playlist" type="filename">
+  Load and play files from a playlist file. Supports common playlist formats; unknown formats are treated as newline-separated file lists.
+
+  <Warning>
+  Only use `--playlist` with playlist files you trust. Since mpv 0.31.0, the same security checks apply as for directly-played playlist files. For untrusted sources, avoid this option entirely.
+  </Warning>
+</ParamField>

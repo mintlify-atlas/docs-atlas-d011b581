@@ -1,0 +1,72 @@
+---
+title: "Introduction"
+description: "What mpv is, what it can do, and how it fits into your workflow"
+---
+
+mpv is a free and open-source media player for the command line. It supports a wide variety of media file formats, audio and video codecs, and subtitle types, and runs on Linux, macOS, and Windows.
+
+## What is mpv?
+
+mpv is descended from [MPlayer](https://mplayerhq.hu/) and mplayer2. Where those projects focused on compatibility, mpv focuses on correctness, modern GPU rendering, and a clean, scriptable interface. It exposes almost everything through options, properties, and a JSON IPC socket, making it as useful as a headless playback engine as it is as a desktop media player.
+
+mpv does not ship a traditional GUI. Instead it renders an on-screen controller (OSC) over the video window and gives you a keyboard-driven interface documented in the [keyboard controls](/usage/keyboard-controls) page.
+
+## Key capabilities
+
+<CardGroup cols={2}>
+  <Card title="Wide format support" icon="film">
+    Plays virtually any video or audio format via FFmpeg — MKV, MP4, AVI, FLAC, Opus, AAC, and hundreds more. Reads from local files, HTTP/HTTPS URLs, HLS and DASH streams, and stdin.
+  </Card>
+  <Card title="GPU-accelerated rendering" icon="display">
+    Uses shader-based video rendering through libplacebo and the `gpu-next` video output driver. Supports high-quality scaling, HDR tone-mapping, and frame interpolation without relying on fixed GPU hardware functions.
+  </Card>
+  <Card title="Lua and JavaScript scripting" icon="code">
+    Extend mpv with scripts dropped into `~/.config/mpv/scripts/`. Scripts can bind keys, query and set player properties, and react to playback events via a rich API.
+  </Card>
+  <Card title="libmpv embedding" icon="puzzle-piece">
+    Embed mpv as a playback backend in your own application using the libmpv C API. Many third-party frontends and media center applications are built on top of libmpv.
+  </Card>
+  <Card title="JSON IPC" icon="plug">
+    Control a running mpv instance from any language through a Unix socket or named pipe. Send commands, query properties, and subscribe to events using a simple JSON protocol.
+  </Card>
+  <Card title="Hardware decoding" icon="microchip">
+    Optionally offload video decoding to the GPU using VAAPI, VDPAU, NVDEC (Linux), VideoToolbox (macOS), or D3D11VA (Windows) via the `--hwdec` option.
+  </Card>
+</CardGroup>
+
+## Supported platforms
+
+| Platform | Minimum version |
+|---|---|
+| Linux | A not-too-ancient distribution (latest releases are actively supported) |
+| Windows | Windows 10 1607 or later |
+| macOS | macOS 10.15 (Catalina) or later |
+
+mpv does not go out of its way to break on older hardware or unsupported operating systems, but development does not target them. If things work on older setups, consider it a bonus rather than a guarantee.
+
+## Brief history
+
+mpv began as a fork of mplayer2, which was itself a fork of the original MPlayer project. The project moved away from MPlayer's legacy codebase to build a cleaner architecture with modern audio/video output, a configurable input layer, and the libmpv embedding API. The first mpv release was cut in 2013. Releases follow a roughly biannual cycle, with each `0.X.0` release cut from the current development state.
+
+## Explore the documentation
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install mpv on Linux, macOS, or Windows using your package manager or official builds.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Play your first file and learn the essential controls in minutes.
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/usage/configuration">
+    Persist your settings in `mpv.conf` and customize every aspect of playback.
+  </Card>
+  <Card title="Scripting" icon="terminal" href="/scripting/lua-scripting">
+    Automate mpv with Lua or JavaScript scripts and the IPC protocol.
+  </Card>
+  <Card title="Video output" icon="tv" href="/av/video-output">
+    Configure the GPU-accelerated video output pipeline and rendering options.
+  </Card>
+  <Card title="libmpv embedding" icon="cube" href="/embedding/libmpv">
+    Use mpv as a library inside your own application via the C API.
+  </Card>
+</CardGroup>

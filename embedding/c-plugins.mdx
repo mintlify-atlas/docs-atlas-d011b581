@@ -1,0 +1,191 @@
+---
+title: "C Plugins"
+description: "Write native C plugins for mpv using the libmpv API"
+---
+
+C plugins let you extend mpv with native code. They use the libmpv API but are loaded directly into the mpv process — you do not link against `libmpv.so` or `libmpv.dll`. Instead, your plugin uses symbols exported from the mpv host binary.
+
+<Note>
+C plugins are enabled by default on Linux/BSD when the compiler supports `-rdynamic`, and are always enabled on Windows.
+</Note>
+
+## Plugin location
+
+mpv discovers C plugins automatically from the scripts directory in its config directory (the same location as Lua scripts):
+
+| Platform | File extension | Example path |
+|---|---|---|
+| Linux / BSD | `.so` | `~/.config/mpv/scripts/myplugin.so` |
+| Windows | `.dll` | `%APPDATA%\mpv\scripts\myplugin.dll` |
+
+You can also load a plugin explicitly regardless of location:
+
+```bash
+mpv --script=/path/to/myplugin.so myvideo.mkv
+```
+
+## Required export
+
+Every C plugin must export exactly one function:
+
+```c
+int mpv_open_cplugin(mpv_handle *handle);
+```
+
+mpv calls this function when the plugin is loaded. The function receives an `mpv_handle` that belongs to the plugin — it was created internally with the equivalent of `mpv_create_client()`.
+
+**The function must not return for as long as the plugin is loaded.** It runs in its own dedicated thread. When the function returns, the handle is destroyed.
+
+### Return values
+
+| Return value | Meaning |
+|---|---|
+| `0` | Plugin loaded successfully |
+| `-1` | Error; mpv prints a loading failure message |
+
+Any other return value is reserved and triggers undefined behavior.
+
+## Event loop pattern
+
+Because `mpv_open_cplugin` must not return, the typical plugin body is an event loop using `mpv_wait_event()`:
+
+```c
+#include <mpv/client.h>
+
+int mpv_open_cplugin(mpv_handle *handle) {
+    // Optional: install hooks, observe properties, etc.
+    // mpv may block until mpv_wait_event() is called for the first time.
+    // Use this window to set up hooks before playback begins.
+
+    while (1) {
+        mpv_event *event = mpv_wait_event(handle, -1);
+
+        if (event->event_id == MPV_EVENT_SHUTDOWN)
+            break;
+
+        if (event->event_id == MPV_EVENT_FILE_LOADED) {
+            char *path = mpv_get_property_string(handle, "path");
+            // ... do something with path ...
+            mpv_free(path);
+        }
+    }
+
+    return 0; // 0 = success; handle is freed by mpv after this returns
+}
+```
+
+<Warning>
+Do **not** call `mpv_destroy()` or `mpv_terminate_destroy()` on the handle passed to `mpv_open_cplugin`. mpv owns and manages that handle's lifetime.
+</Warning>
+
+## Interacting with the player
+
+Within `mpv_open_cplugin`, you have full access to the libmpv API through the provided handle:
+
+```c
+// Send a command
+const char *cmd[] = {"show-text", "Hello from C plugin!", "3000", NULL};
+mpv_command(handle, cmd);
+
+// Set a property
+mpv_set_property_string(handle, "pause", "yes");
+
+// Observe a property for changes
+mpv_observe_property(handle, 1, "time-pos", MPV_FORMAT_DOUBLE);
+
+// Register a hook to run code before a file loads
+mpv_hook_add(handle, 0, "on_load", 0);
+```
+
+## Compile instructions
+
+Compile the plugin as a shared library. Do **not** link against `libmpv`.
+
+<Tabs>
+  <Tab title="Linux / BSD">
+    ```bash
+    gcc -shared -fPIC -o myplugin.so myplugin.c
+    ```
+
+    The plugin resolves mpv symbols from the host binary at runtime via `-rdynamic` (which mpv enables when building).
+  </Tab>
+  <Tab title="Windows">
+    On Windows, define `MPV_CPLUGIN_DYNAMIC_SYM` before including any mpv headers. This replaces all `mpv_*` function names with function pointers that are initialized by mpv before `mpv_open_cplugin` is called.
+
+    ```c
+    #define MPV_CPLUGIN_DYNAMIC_SYM
+    #include <mpv/client.h>
+
+    int mpv_open_cplugin(mpv_handle *handle) {
+        // mpv_* calls work normally thanks to MPV_CPLUGIN_DYNAMIC_SYM
+        while (1) {
+            mpv_event *event = mpv_wait_event(handle, -1);
+            if (event->event_id == MPV_EVENT_SHUTDOWN)
+                break;
+        }
+        return 0;
+    }
+    ```
+
+    Compile with MinGW-w64 or Clang targeting `w64-windows-gnu`:
+
+    ```bash
+    gcc -shared -DMPV_CPLUGIN_DYNAMIC_SYM -o myplugin.dll myplugin.c
+    ```
+
+    <Note>
+    `MPV_CPLUGIN_DYNAMIC_SYM` is required on Windows because the Windows loader has no concept of global symbols. Without it, the plugin would need to link explicitly to `libmpv-2.dll` or `mpv.exe`, limiting portability. With it, function pointers are initialized at load time regardless of which binary hosts mpv's symbols.
+    </Note>
+  </Tab>
+</Tabs>
+
+## Minimal complete example
+
+```c
+#define MPV_CPLUGIN_DYNAMIC_SYM  // remove this line on Linux/BSD
+#include <mpv/client.h>
+#include <stdio.h>
+
+int mpv_open_cplugin(mpv_handle *handle) {
+    printf("C plugin loaded, client name: %s\n", mpv_client_name(handle));
+
+    mpv_observe_property(handle, 1, "filename", MPV_FORMAT_STRING);
+
+    while (1) {
+        mpv_event *event = mpv_wait_event(handle, -1);
+
+        switch (event->event_id) {
+        case MPV_EVENT_PROPERTY_CHANGE: {
+            mpv_event_property *prop = event->data;
+            if (prop->format == MPV_FORMAT_STRING) {
+                char *filename = *(char **)prop->data;
+                printf("Now playing: %s\n", filename);
+            }
+            break;
+        }
+        case MPV_EVENT_SHUTDOWN:
+            return 0;
+        default:
+            break;
+        }
+    }
+}
+```
+
+## Linkage rules
+
+<AccordionGroup>
+  <Accordion title="Why not link against libmpv?">
+    C plugins are loaded into the mpv process at runtime. Their symbols are resolved against the host binary (mpv itself or any application that embeds libmpv). Linking the plugin against `libmpv.so` would create a second, conflicting copy of the mpv core inside the same process.
+  </Accordion>
+  <Accordion title="How does MPV_CPLUGIN_DYNAMIC_SYM work?">
+    When this macro is defined, the `mpv/client.h` header declares a function pointer (e.g. `pfn_mpv_wait_event`) for every exported function, then `#define`s the original name to that pointer. mpv initializes all pointers before calling `mpv_open_cplugin`, so your code uses the pointers transparently. The pointers are decorated with `__declspec(selectany)` so multiple translation units do not cause linker errors.
+  </Accordion>
+  <Accordion title="Can a plugin use other mpv headers?">
+    Yes. `render.h`, `render_gl.h`, and `stream_cb.h` all support `MPV_CPLUGIN_DYNAMIC_SYM` and can be used from a C plugin. Include them after defining the macro.
+  </Accordion>
+</AccordionGroup>
+
+## Further examples
+
+The [mpv-examples repository](https://github.com/mpv-player/mpv-examples/tree/master/cplugins) contains additional C plugin examples covering hooks, IPC patterns, and property observation.

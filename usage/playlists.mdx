@@ -1,0 +1,210 @@
+---
+title: "Playlists"
+description: "Managing playlists, playlist files, and playlist navigation"
+---
+
+## Building a playlist from the command line
+
+Passing multiple files to mpv creates an internal playlist and plays each entry in order:
+
+```bash
+mpv episode1.mkv episode2.mkv episode3.mkv
+mpv *.mkv
+```
+
+Files are played sequentially. All command-line options apply to every file unless you scope them with `--{` / `--}` markers (see [per-file options](/usage/basic-playback#per-file-options)).
+
+## Loading a playlist file
+
+Use `--playlist=<file>` to load a playlist file. Supported formats include M3U, PLS, and plain text files with one path or URL per line. XML playlist formats are not supported.
+
+```bash
+mpv --playlist=my-playlist.m3u
+mpv --playlist=playlist.pls
+mpv --playlist=files.txt        # plain text, one file per line
+```
+
+<Warning>
+  Only use `--playlist` with files you trust. Playlist files can reference
+  arbitrary protocols, including unsafe ones. If you need to load an untrusted
+  playlist, review its contents first. Unsafe entries require
+  `--load-unsafe-playlists` to open.
+</Warning>
+
+You can also open many playlist files directly (without `--playlist`) and mpv will detect the format automatically. The `--playlist` option forces the `playlist` demuxer.
+
+## Playlist navigation
+
+### Keyboard controls
+
+| Key | Action |
+|-----|--------|
+| `>` | Go to the next entry |
+| `<` | Go to the previous entry |
+| `Enter` | Go to the next entry |
+| `Shift+Home` | Jump to the first entry |
+| `Shift+End` | Jump to the last entry |
+| `F8` | Show the playlist and current position in the OSD |
+
+### Mouse controls
+
+| Action | Effect |
+|--------|--------|
+| Back button | Go to the previous playlist entry |
+| Forward button | Go to the next playlist entry |
+
+### Interactive selection
+
+Press `g-p` to open a searchable playlist picker in the console. Navigate with arrow keys or type to filter entries.
+
+## Playlist options
+
+### Starting position
+
+```bash
+# Start at the 4th entry (0-indexed)
+mpv --playlist-start=3 playlist.m3u
+
+# Start at entry 123
+mpv playlist.m3u --playlist-start=123
+```
+
+The default value of `auto` defers to the playback resume mechanism — if a watch-later resume file exists for an entry in the list, playback begins there automatically.
+
+### Shuffle
+
+Play entries in random order:
+
+```bash
+mpv --shuffle *.mkv
+mpv --shuffle --playlist=playlist.m3u
+```
+
+### Looping
+
+<CodeGroup>
+
+```bash Loop the playlist
+# Loop the entire playlist forever
+mpv --loop-playlist episode1.mkv episode2.mkv episode3.mkv
+mpv --loop-playlist=inf --playlist=show.m3u
+
+# Loop the playlist a specific number of times
+mpv --loop-playlist=3 *.mkv
+```
+
+```bash Loop a single file
+# Loop the current file forever (does not loop the playlist)
+mpv --loop video.mkv
+mpv --loop=inf video.mkv
+
+# Loop a single file 3 times (plays it 4 times total)
+mpv --loop=3 video.mkv
+```
+
+</CodeGroup>
+
+<Note>
+  `--loop` (alias for `--loop-file`) counts the number of additional seeks to
+  the beginning. `--loop=1` plays the file twice. In contrast, `--loop-playlist`
+  counts full playthroughs, so `--loop-playlist=2` plays the whole playlist
+  twice.
+</Note>
+
+`--loop-playlist=force` is like `inf` but does not skip entries that fail to play, which can be useful for internet radio streams under poor network conditions.
+
+## A-B loop
+
+Set loop points within a single file to repeat a segment:
+
+```bash
+# Set loop points on the command line
+mpv --ab-loop-a=00:01:30 --ab-loop-b=00:02:00 video.mkv
+```
+
+During playback, press `l` to set or clear loop points interactively. Each press of `l` toggles through: set point A → set point B → clear both.
+
+## Ordered chapters (linked MKV)
+
+Matroska files can contain ordered chapters that reference segments in other files. mpv supports this by default, automatically loading referenced files from the same directory:
+
+```bash
+# Ordered chapters are enabled by default
+mpv series_ep01.mkv
+
+# Disable ordered chapter support
+mpv --no-ordered-chapters series_ep01.mkv
+```
+
+If the referenced files are in a different location, provide an explicit playlist of segment files:
+
+```bash
+mpv --ordered-chapters-files=segments.txt main.mkv
+```
+
+## Clipboard and runtime loading
+
+Press `Ctrl+v` during playback to append the file path or URL in the clipboard to the current playlist. If nothing is playing, the file starts immediately.
+
+You can also reload the current file (clearing the network cache) with `Ctrl+r`.
+
+## Scripting: playlist properties and commands
+
+When writing Lua or JavaScript scripts, the following properties expose the current playlist state:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `playlist` | array | List of all playlist entries with `filename`, `title`, and `current` fields |
+| `playlist-count` | integer | Total number of entries in the playlist |
+| `playlist-pos` | integer | Zero-based index of the current entry (writable to change position) |
+| `playlist-pos-1` | integer | One-based index of the current entry |
+
+### loadfile command
+
+Load a file or URL into the playlist at runtime. The `flags` argument controls the behavior:
+
+| Flag | Effect |
+|------|--------|
+| `replace` | Replace the current playlist (default) |
+| `append` | Append to the playlist without changing what is playing |
+| `append-play` | Append and immediately play if nothing is currently playing |
+| `insert-next` | Insert after the current entry |
+| `insert-next-play` | Insert after the current entry and play immediately |
+
+```lua
+-- Append a file to the playlist
+mp.commandv("loadfile", "/path/to/video.mkv", "append")
+
+-- Replace the playlist and start playing
+mp.commandv("loadfile", "https://example.com/stream.m3u8", "replace")
+```
+
+### loadlist command
+
+Load an entire playlist file into the internal playlist:
+
+```lua
+-- Replace the playlist with a file
+mp.commandv("loadlist", "/path/to/playlist.m3u", "replace")
+
+-- Append all entries from a playlist file
+mp.commandv("loadlist", "/path/to/more.m3u", "append")
+```
+
+### Accessing playlist entries in Lua
+
+```lua
+local count = mp.get_property_number("playlist-count")
+local pos   = mp.get_property_number("playlist-pos")
+
+mp.msg.info(string.format("Playing entry %d of %d", pos + 1, count))
+
+-- Jump to the next entry
+mp.commandv("playlist-next")
+
+-- Jump to the previous entry
+mp.commandv("playlist-prev")
+
+-- Jump to a specific index (0-based)
+mp.set_property_number("playlist-pos", 2)
+```

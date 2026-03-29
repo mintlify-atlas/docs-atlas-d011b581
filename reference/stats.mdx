@@ -1,0 +1,337 @@
+---
+title: "Stats overlay"
+description: "Display real-time playback statistics and performance information"
+---
+
+The stats overlay is a built-in Lua script that displays detailed playback statistics and performance information directly on the OSD. It is enabled by default in all mpv builds with Lua support.
+
+## Enabling and disabling
+
+The stats overlay is loaded automatically. To disable it:
+
+```bash
+mpv --load-stats-overlay=no file.mkv
+```
+
+Or in your config file:
+
+```ini
+# ~/.config/mpv/mpv.conf
+load-stats-overlay=no
+```
+
+## Basic usage
+
+<Steps>
+  <Step title="Show stats briefly">
+    Press `i` to display stats for a fixed duration (default: 4 seconds), then they disappear automatically.
+  </Step>
+  <Step title="Toggle stats permanently">
+    Press `I` (capital i) to keep stats visible until toggled off again. Press `I` again or `ESC` to hide them.
+  </Step>
+  <Step title="Show key bindings">
+    Press `?` to toggle the display of active key bindings.
+  </Step>
+</Steps>
+
+## Default key bindings
+
+### Activation
+
+| Key | Action |
+|-----|--------|
+| `i` | Show stats for a fixed duration |
+| `I` | Toggle stats (stay until toggled off) |
+| `?` | Toggle key bindings display |
+
+### Page navigation (while stats are visible)
+
+| Key | Page |
+|-----|------|
+| `1` | Playback info (video, audio, timing) |
+| `2` | Frame timings (scrollable) |
+| `3` | Input cache stats (scrollable) |
+| `4` | Active key bindings (scrollable) |
+| `5` | Selected tracks info (scrollable) |
+| `0` | Internal performance data (scrollable) |
+
+### Scroll controls (on scrollable pages)
+
+| Key | Action |
+|-----|--------|
+| `UP` | Scroll one line up |
+| `DOWN` | Scroll one line down |
+
+### Key bindings page (page 4)
+
+| Key | Action |
+|-----|--------|
+| `/` | Search key bindings |
+
+### When stats are toggled on
+
+| Key | Action |
+|-----|--------|
+| `ESC` | Close the stats overlay |
+
+## Pages overview
+
+<AccordionGroup>
+  <Accordion title="Page 1 — Playback info">
+    The default page. Shows:
+    - Video codec, format, resolution, framerate, bitrate
+    - Audio codec, sample rate, channels, bitrate
+    - Current A/V sync offset
+    - Dropped frame count
+    - Cache fill status and buffer duration
+    - Optional graphs for vsync ratio and jitter (when toggled, if `plot_vsync_ratio` / `plot_vsync_jitter` are enabled)
+  </Accordion>
+  <Accordion title="Page 2 — Frame timings">
+    Shows per-frame timing data including decoder, filter, and display times. Supports scrolling for long lists. Optionally shows graphs for performance data (`plot_perfdata=yes`).
+  </Accordion>
+  <Accordion title="Page 3 — Input cache stats">
+    Shows the demuxer cache status, including bytes in cache, cache ranges, and timestamps. Optionally shows a cache fill graph (`plot_cache=yes` in toggled mode).
+  </Accordion>
+  <Accordion title="Page 4 — Active key bindings">
+    Lists all active key bindings and the commands they run, grouped by command type. Excludes stats script internal keys.
+
+    You can also print this list to the terminal and quit immediately:
+    ```bash
+    mpv --idle --script-opt=stats-bindlist=yes
+    ```
+
+    Disable escape sequences in the output:
+    ```bash
+    mpv --idle --script-opt=stats-bindlist=-yes
+    ```
+
+    Limit to built-in bindings only:
+    ```bash
+    mpv --no-config --idle --script-opt=stats-bindlist=yes
+    ```
+  </Accordion>
+  <Accordion title="Page 5 — Track info">
+    Detailed information about selected tracks (or all tracks, depending on `track_info_selected_only`): codec, format, bitrate, language, metadata.
+  </Accordion>
+  <Accordion title="Page 0 — Internal data">
+    Internal performance counters including CPU/thread time per subsystem and per Lua script. Selecting this page for the first time enables data collection, which has a small ongoing performance impact.
+
+    <Warning>
+    The internal data page can itself use significant CPU and GPU resources. Treat it as a debugging tool only.
+    </Warning>
+  </Accordion>
+</AccordionGroup>
+
+## Configuration
+
+Configure the stats script through `~/.config/mpv/script-opts/stats.conf` or via `--script-opts` on the command line (prefix options with `stats-`):
+
+```bash
+mpv --script-opts=stats-duration=8,stats-font_size=18 file.mkv
+```
+
+### Timing options
+
+<ParamField path="duration" type="integer (seconds)" default="4">
+  How long the stats display stays on screen when triggered with `i` (oneshot mode).
+</ParamField>
+
+<ParamField path="redraw_delay" type="integer (seconds)" default="1">
+  How frequently the stats display refreshes when in toggled mode (`I`).
+</ParamField>
+
+### Key binding options
+
+<ParamField path="key_page_1" default="1">
+  Key to show page 1.
+</ParamField>
+
+<ParamField path="key_page_2" default="2">
+  Key to show page 2.
+</ParamField>
+
+<ParamField path="key_page_3" default="3">
+  Key to show page 3.
+</ParamField>
+
+<ParamField path="key_page_4" default="4">
+  Key to show page 4.
+</ParamField>
+
+<ParamField path="key_page_5" default="5">
+  Key to show page 5.
+</ParamField>
+
+<ParamField path="key_page_0" default="0">
+  Key to show page 0 (internal data).
+</ParamField>
+
+<ParamField path="key_exit" default="ESC">
+  Key to close the stats when in toggled mode.
+</ParamField>
+
+<ParamField path="key_scroll_up" default="UP">
+  Scroll up on scrollable pages.
+</ParamField>
+
+<ParamField path="key_scroll_down" default="DOWN">
+  Scroll down on scrollable pages.
+</ParamField>
+
+<ParamField path="key_scroll_search" default="/">
+  Search key bindings on page 4.
+</ParamField>
+
+<ParamField path="scroll_lines" type="integer" default="1">
+  Number of lines to scroll per key press on scrollable pages.
+</ParamField>
+
+### Display options
+
+<ParamField path="persistent_overlay" type="yes|no" default="no">
+  When `yes`, stats text is not overwritten by other scripts printing to the OSD. When `no`, any script writing to the OSD can overwrite the stats. Enabling this can cause overlapping text if multiple scripts write simultaneously.
+</ParamField>
+
+<ParamField path="track_info_selected_only" type="yes|no" default="yes">
+  When `yes`, page 5 shows only selected tracks. When `no`, all tracks in the file are listed.
+</ParamField>
+
+### File tag limits
+
+<ParamField path="file_tag_max_length" type="integer (bytes)" default="128">
+  Hide file metadata tags longer than this many bytes.
+</ParamField>
+
+<ParamField path="file_tag_max_count" type="integer" default="16">
+  Show at most this many file metadata tags.
+</ParamField>
+
+<ParamField path="term_clip" type="yes|no" default="yes">
+  Clip lines to the terminal width when printing to the terminal (used with `bindlist`).
+</ParamField>
+
+### Graph options
+
+<ParamField path="plot_perfdata" type="yes|no" default="no">
+  Show performance graphs on page 2.
+</ParamField>
+
+<ParamField path="plot_vsync_ratio" type="yes|no" default="no">
+  Show a vsync ratio graph on page 1 (toggled mode only).
+</ParamField>
+
+<ParamField path="plot_vsync_jitter" type="yes|no" default="no">
+  Show a vsync jitter graph on page 1 (toggled mode only).
+</ParamField>
+
+<ParamField path="plot_cache" type="yes|no" default="yes">
+  Show a cache fill graph on page 3 (toggled mode only).
+</ParamField>
+
+<ParamField path="plot_tonemapping_lut" type="yes|no" default="no">
+  Enable tone-mapping LUT visualization automatically (toggled mode only).
+</ParamField>
+
+<ParamField path="flush_graph_data" type="yes|no" default="yes">
+  Clear graph data buffers when toggling stats off and on.
+</ParamField>
+
+### Appearance options
+
+<ParamField path="font" type="string" default="same as osd-font">
+  Font family for stats text. Should support multiple weights for best appearance.
+</ParamField>
+
+<ParamField path="font_mono" type="string" default="monospace">
+  Monospaced font for aligned columns. Monospaced digits are sufficient.
+</ParamField>
+
+<ParamField path="font_size" type="integer" default="20">
+  Font size for stats text in scaled pixels.
+</ParamField>
+
+<ParamField path="font_color" type="color (BBGGRR hex)" default="same as osd-color">
+  Text color. Note: unlike most mpv color options, stats colors use **ASS tag order: BBGGRR** (blue-green-red), not RRGGBB.
+</ParamField>
+
+<ParamField path="border_size" type="float" default="1.65">
+  Outline size drawn around stats text.
+</ParamField>
+
+<ParamField path="border_color" type="color (BBGGRR hex)" default="same as osd-border-color">
+  Text outline color (BBGGRR order).
+</ParamField>
+
+<ParamField path="shadow_x_offset" type="float" default="same as --osd-shadow-offset">
+  Horizontal shadow offset in scaled pixels.
+</ParamField>
+
+<ParamField path="shadow_y_offset" type="float" default="same as --osd-shadow-offset">
+  Vertical shadow offset in scaled pixels.
+</ParamField>
+
+<ParamField path="shadow_color" type="color (BBGGRR hex)" default="same as osd-shadow-color">
+  Shadow color (BBGGRR order).
+</ParamField>
+
+<ParamField path="alpha" type="integer (0–255)" default="11">
+  Transparency of text, borders, and shadows when their respective colors are specified. `0` is fully opaque, `255` is fully transparent.
+</ParamField>
+
+<ParamField path="vidscale" type="auto|yes|no" default="auto">
+  Scale stats text with the video/window:
+  - `auto` — scale with OSD (respects `--osd-scale-by-window`)
+  - `no` — fixed size regardless of window dimensions
+</ParamField>
+
+### Graph colors
+
+<Note>
+Graph colors use BBGGRR hex order (not RRGGBB).
+</Note>
+
+<ParamField path="plot_bg_border_color" type="color (BBGGRR)" default="0000FF">
+  Border color for graph backgrounds.
+</ParamField>
+
+<ParamField path="plot_bg_border_width" type="float" default="1.25">
+  Border width for graph backgrounds.
+</ParamField>
+
+<ParamField path="plot_bg_color" type="color (BBGGRR)" default="262626">
+  Background color for graphs.
+</ParamField>
+
+<ParamField path="plot_color" type="color (BBGGRR)" default="FFFFFF">
+  Foreground color for graph data lines.
+</ParamField>
+
+## Custom key bindings
+
+You can add extra bindings in `input.conf` to trigger specific stats pages:
+
+```
+# input.conf
+
+e script-binding stats/display-stats
+E script-binding stats/display-stats-toggle
+
+i script-binding stats/display-page-1
+h script-binding stats/display-page-4-toggle
+```
+
+## Example configuration
+
+```ini
+# ~/.config/mpv/script-opts/stats.conf
+
+duration=6
+redraw_delay=1
+font_size=18
+persistent_overlay=no
+track_info_selected_only=yes
+plot_cache=yes
+plot_perfdata=no
+plot_vsync_ratio=no
+vidscale=auto
+```

@@ -1,0 +1,242 @@
+---
+title: "OSD options"
+description: "Configure the On-Screen Display (OSD) text, duration, and appearance"
+---
+
+The On-Screen Display (OSD) shows status messages, seek bars, and playback time overlays directly on the video. These options control what is shown, when it appears, and how it looks.
+
+## Display mode
+
+<ParamField path="--osd-level" type="integer (0–3)" default="1">
+  Set the initial OSD mode.
+
+  | Level | Behavior |
+  |-------|----------|
+  | `0` | OSD completely disabled — only subtitles are rendered |
+  | `1` | OSD enabled; messages appear only on user interaction |
+  | `2` | OSD enabled; current playback time always visible |
+  | `3` | OSD enabled; full status (time, duration, and more) always visible |
+
+  ```bash
+  mpv --osd-level=0 file.mkv   # subtitle-only, no OSD
+  mpv --osd-level=2 file.mkv   # always show current time
+  ```
+</ParamField>
+
+<ParamField path="--osd-bar" type="yes|no" default="yes">
+  Show the seek bar during seeks. To disable the OSD entirely, use `--osd-level=0` instead.
+</ParamField>
+
+<ParamField path="--osd-on-seek" type="no|bar|msg|msg-bar" default="bar">
+  What to display on the OSD when the user seeks.
+
+  - `no` — show nothing
+  - `bar` — show only the seek bar
+  - `msg` — show only the time message
+  - `msg-bar` — show both the message and the bar
+</ParamField>
+
+<ParamField path="--osd-fractions" type="flag">
+  Show OSD timestamps with millisecond precision (`HH:MM:SS.mmm`). Useful for identifying exact video frame positions.
+</ParamField>
+
+## Message duration and content
+
+<ParamField path="--osd-duration" type="integer (ms)" default="1000">
+  How long OSD messages remain on screen, in milliseconds.
+
+  ```bash
+  mpv --osd-duration=3000 file.mkv   # keep messages for 3 seconds
+  ```
+</ParamField>
+
+<ParamField path="--osd-msg1" type="string">
+  Message displayed at OSD level 1 (visible by default). Supports property expansion — for example, `${filename}` inserts the current filename.
+
+  ```bash
+  mpv --osd-msg1='${filename} — ${time-pos}/${duration}' file.mkv
+  ```
+</ParamField>
+
+<ParamField path="--osd-msg2" type="string">
+  Message displayed at OSD level 2. If empty (the default), shows the current playback time.
+</ParamField>
+
+<ParamField path="--osd-msg3" type="string">
+  Message displayed at OSD level 3, and used by the `show-progress` command (default binding: `P`) and when seeking with the `msg` or `msg-bar` seek modes. If empty, shows the playback time, duration, and additional status.
+
+  Supersedes `--osd-status-msg`.
+</ParamField>
+
+<ParamField path="--osd-status-msg" type="string">
+  Legacy equivalent of `--osd-msg3`. Implicitly appends `${osd-sym-cc}`. Ignored if `--osd-msg3` is not empty. Prefer `--osd-msg3`.
+</ParamField>
+
+<ParamField path="--osd-playing-msg" type="string">
+  Show a message when playback starts. Expands properties.
+
+  ```bash
+  mpv --osd-playing-msg='Now playing: ${media-title}' file.mkv
+  ```
+</ParamField>
+
+<ParamField path="--osd-playing-msg-duration" type="integer (ms)">
+  How long `--osd-playing-msg` stays on screen. Defaults to `--osd-duration` if unset.
+</ParamField>
+
+## Font and text appearance
+
+<ParamField path="--osd-font" type="string" default="sans-serif">
+  Font family name to use for OSD text.
+
+  ```bash
+  mpv --osd-font='Noto Sans' file.mkv
+  mpv --osd-font='Comic Sans MS' file.mkv
+  ```
+</ParamField>
+
+<ParamField path="--osd-font-size" type="float" default="30">
+  Font size in scaled pixels. The actual display size depends on `--osd-scale` and `--osd-scale-by-window`.
+</ParamField>
+
+<ParamField path="--osd-bold" type="yes|no">
+  Render OSD text in bold.
+</ParamField>
+
+<ParamField path="--osd-italic" type="yes|no">
+  Render OSD text in italic.
+</ParamField>
+
+<ParamField path="--osd-blur" type="float (0–20)" default="0">
+  Apply a Gaussian blur to the OSD font outline. `0` means no blur.
+</ParamField>
+
+## Colors
+
+Colors are specified as `r/g/b` (each component 0.0–1.0), with optional alpha as `r/g/b/a`, or as `#RRGGBB` / `#AARRGGBB` hex values. Alpha `0` is fully transparent, `1.0` is fully opaque.
+
+<ParamField path="--osd-color" type="color" default="#FFFFFF">
+  Color of OSD text.
+
+  ```bash
+  mpv --osd-color='#FF0000' file.mkv          # red text
+  mpv --osd-color='1.0/1.0/1.0/0.8' file.mkv # white with 80% opacity
+  ```
+</ParamField>
+
+<ParamField path="--osd-outline-color" type="color">
+  Color of the text outline. `--osd-border-color` is an alias.
+
+  ```bash
+  mpv --osd-outline-color='#000000' file.mkv   # black outline
+  ```
+</ParamField>
+
+<ParamField path="--osd-back-color" type="color">
+  Color of the text background (used with `--osd-border-style=opaque-box`). `--osd-shadow-color` is an alias.
+</ParamField>
+
+<ParamField path="--osd-outline-size" type="float" default="1.65">
+  Size of the OSD text outline in scaled pixels. Set to `0` to disable outlines. `--osd-border-size` is an alias.
+</ParamField>
+
+<ParamField path="--osd-border-style" type="outline-and-shadow|opaque-box|background-box" default="outline-and-shadow">
+  Style used for OSD text borders:
+
+  - `outline-and-shadow` — standard text with outline and optional shadow
+  - `opaque-box` — solid background box behind each text line
+  - `background-box` — background box spanning all lines of text
+</ParamField>
+
+<ParamField path="--osd-shadow-offset" type="float" default="0">
+  Shadow displacement in scaled pixels. `0` disables shadows.
+</ParamField>
+
+## Seek bar position and size
+
+<ParamField path="--osd-bar-align-x" type="float (-1 to 1)" default="0">
+  Horizontal position of the OSD seek bar. `-1` is left, `0` is centered, `1` is right.
+</ParamField>
+
+<ParamField path="--osd-bar-align-y" type="float (-1 to 1)" default="0.5">
+  Vertical position of the OSD seek bar. `-1` is top, `0` is centered, `1` is bottom.
+</ParamField>
+
+<ParamField path="--osd-bar-w" type="float (1–100)" default="75">
+  Width of the OSD seek bar as a percentage of the screen width.
+</ParamField>
+
+<ParamField path="--osd-bar-h" type="float (0.1–50)" default="3.125">
+  Height of the OSD seek bar as a percentage of the screen height.
+</ParamField>
+
+## Scale and position
+
+<ParamField path="--osd-scale" type="float">
+  Scale multiplier applied to `--osd-font-size`. Values above 1 make the OSD larger.
+</ParamField>
+
+<ParamField path="--osd-scale-by-window" type="yes|no" default="yes">
+  Scale OSD size with the window size. When disabled, `--osd-font-size` is interpreted as literal pixels, and resizing the window does not change OSD size.
+</ParamField>
+
+<ParamField path="--osd-align-x" type="left|center|right" default="left">
+  Horizontal alignment of OSD text.
+</ParamField>
+
+<ParamField path="--osd-align-y" type="top|center|bottom" default="top">
+  Vertical alignment of OSD text.
+</ParamField>
+
+<ParamField path="--osd-margin-x" type="integer (scaled pixels)" default="16">
+  Left and right margin for OSD text in scaled pixels. Controls distance from the screen edge and the wrap point for long messages.
+</ParamField>
+
+<ParamField path="--osd-margin-y" type="integer (scaled pixels)" default="16">
+  Top and bottom margin for OSD text in scaled pixels.
+</ParamField>
+
+## Configuration examples
+
+<CodeGroup>
+
+```bash Minimal OSD
+# No seek bar, just a small time display on interaction
+mpv --osd-level=1 --osd-bar=no file.mkv
+```
+
+```bash Always-on timestamp
+mpv --osd-level=2 --osd-font-size=22 file.mkv
+```
+
+```bash Custom playback message
+mpv --osd-playing-msg='${media-title}' \
+    --osd-playing-msg-duration=3000 \
+    --osd-font='Noto Sans' \
+    --osd-color='#FFFFFF' \
+    --osd-outline-color='#000000' \
+    file.mkv
+```
+
+```bash Large OSD for TV / couch viewing
+mpv --osd-font-size=48 --osd-scale=1.5 --osd-bar-h=5 file.mkv
+```
+
+</CodeGroup>
+
+## Configuration file
+
+```ini
+# ~/.config/mpv/mpv.conf
+
+osd-level=1
+osd-duration=2000
+osd-font=Noto Sans
+osd-font-size=32
+osd-color=#FFFFFF
+osd-outline-color=#000000
+osd-outline-size=2
+osd-bar-align-y=1
+osd-bar-w=90
+osd-bar-h=2
+```

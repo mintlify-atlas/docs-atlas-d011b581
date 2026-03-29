@@ -1,0 +1,249 @@
+---
+title: "Video Output"
+description: "Configure video output drivers including gpu-next, gpu, and platform-specific backends"
+---
+
+Video output drivers are interfaces to different video output facilities. mpv automatically selects the best available driver, but you can override it with `--vo`.
+
+```bash
+mpv --vo=<driver> video.mkv
+```
+
+Pass a comma-separated priority list to fall back automatically:
+
+```bash
+mpv --vo=gpu-next,gpu video.mkv
+```
+
+<Tip>Run `mpv --vo=help` to list all compiled-in video output drivers on your system.</Tip>
+
+## Recommended drivers
+
+<CardGroup cols={2}>
+  <Card title="gpu-next" icon="star">
+    libplacebo-based renderer. The recommended default. Generally faster and higher quality than `gpu`.
+  </Card>
+  <Card title="gpu" icon="microchip">
+    General-purpose GPU renderer. Mature, widely supported, with extensive options for scaling and color management.
+  </Card>
+</CardGroup>
+
+### gpu-next
+
+`gpu-next` is the default video output driver. It is based on `libplacebo` and supports nearly the same feature set as `--vo=gpu`, while being faster and higher quality in most cases. Some features may be intentionally omitted or behave differently.
+
+```bash
+mpv --vo=gpu-next video.mkv
+```
+
+For a detailed list of differences between `gpu-next` and `gpu`, see the [GPU-Next vs GPU wiki page](https://github.com/mpv-player/mpv/wiki/GPU-Next-vs-GPU).
+
+### gpu
+
+`gpu` is a general-purpose, customizable, GPU-accelerated output driver. It supports extended scaling methods, dithering, color management, custom shaders, HDR, and more.
+
+```bash
+mpv --vo=gpu video.mkv
+```
+
+`gpu` abstracts over several graphics APIs and windowing contexts, controlled with `--gpu-api` and `--gpu-context`.
+
+#### Predefined profiles
+
+<Tabs>
+  <Tab title="fast (maximum performance)">
+    ```bash
+    mpv --profile=fast video.mkv
+    ```
+    Uses `bilinear` scaling and disables many quality-oriented features. Best for lower-end hardware.
+  </Tab>
+  <Tab title="high-quality (best rendering)">
+    ```bash
+    mpv --profile=high-quality video.mkv
+    ```
+    Uses `ewa_lanczossharp` upscaling, enables correct downscaling, sigmoid upscaling, antiringing, and debanding.
+  </Tab>
+</Tabs>
+
+Inspect a profile's full settings:
+
+```bash
+mpv --show-profile=high-quality
+```
+
+## GPU API and context
+
+Use `--gpu-api` to select the graphics API and `--gpu-context` to select the windowing backend.
+
+```bash
+# Use Vulkan
+mpv --gpu-api=vulkan video.mkv
+
+# Use OpenGL
+mpv --gpu-api=opengl video.mkv
+
+# Use D3D11 (Windows)
+mpv --gpu-api=d3d11 video.mkv
+```
+
+**Available `--gpu-context` values:**
+
+| Context | Description |
+|---|---|
+| `auto` | Auto-select (default) |
+| `x11` | X11/GLX (Linux, deprecated in favor of EGL) |
+| `x11egl` | X11/EGL |
+| `x11vk` | X11 Vulkan |
+| `wayland` | Wayland/EGL |
+| `waylandvk` | Wayland Vulkan |
+| `drm` | DRM/EGL (Linux, no desktop needed) |
+| `d3d11` | Direct3D 11 (Windows) |
+| `angle` | D3D11 via ANGLE (Windows) |
+| `win` | Win32/WGL (Windows) |
+| `winvk` | Win32 Vulkan |
+| `macvk` | Vulkan on macOS (experimental) |
+
+## GPU renderer options
+
+These options apply to both `--vo=gpu` and `--vo=gpu-next`.
+
+### Scaling
+
+<AccordionGroup>
+  <Accordion title="--scale (upscaling filter)">
+    Controls the filter used when upscaling video.
+
+    ```bash
+    # Default: lanczos (good balance of quality and speed)
+    mpv --scale=lanczos video.mkv
+
+    # High quality (used by high-quality profile)
+    mpv --scale=ewa_lanczossharp video.mkv
+
+    # Fast (used by fast profile)
+    mpv --scale=bilinear video.mkv
+    ```
+
+    Common values: `bilinear`, `lanczos`, `ewa_lanczos`, `ewa_lanczossharp`, `ewa_lanczos4sharpest`, `mitchell`, `catmull_rom`.
+
+    List all available filters: `mpv --scale=help`
+  </Accordion>
+  <Accordion title="--cscale (chroma upscaling filter)">
+    Filter for upscaling chroma information in subsampled video. Defaults to the value of `--scale` if unset.
+
+    ```bash
+    mpv --cscale=ewa_lanczos video.mkv
+    ```
+  </Accordion>
+  <Accordion title="--dscale (downscaling filter)">
+    Filter applied when downscaling video. Defaults to `hermite`.
+
+    ```bash
+    mpv --dscale=mitchell video.mkv
+    ```
+  </Accordion>
+  <Accordion title="--correct-downscaling">
+    When using convolution filters, extends the filter size during downscaling for higher quality. Enabled by default.
+
+    ```bash
+    mpv --correct-downscaling video.mkv
+    ```
+  </Accordion>
+  <Accordion title="--sigmoid-upscaling">
+    Uses a sigmoidal color transform when upscaling to avoid emphasizing ringing artifacts. Enabled by default.
+
+    ```bash
+    mpv --sigmoid-upscaling video.mkv
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Color management
+
+```bash
+# Load an ICC profile for accurate color output
+mpv --icc-profile=/path/to/profile.icc video.mkv
+
+# Auto-detect the system ICC profile
+mpv --icc-profile-auto video.mkv
+
+# Enable HDR passthrough / set colorspace hint on the display
+mpv --target-colorspace-hint=auto video.mkv
+```
+
+`--target-colorspace-hint` sets colorspace metadata on the display's swapchain (useful for HDR passthrough). Supported on Wayland, D3D11, and `winvk` contexts. `auto` (default) only sets the hint when display parameters are known; `yes` always attempts to set it.
+
+### Dithering
+
+```bash
+# Dither to 8-bit output
+mpv --dither-depth=8 video.mkv
+
+# Auto-detect target depth (default)
+mpv --dither-depth=auto video.mkv
+
+# Disable dithering
+mpv --dither-depth=no video.mkv
+```
+
+Explicitly setting `--dither-depth` to your display's bit depth is recommended, as bit depth cannot be auto-detected on most platforms.
+
+## Other video output drivers
+
+<AccordionGroup>
+  <Accordion title="null">
+    Produces no video output. Useful for benchmarking.
+
+    ```bash
+    mpv --vo=null video.mkv
+    ```
+  </Accordion>
+  <Accordion title="xv (Linux/X11 only)">
+    Uses the XVideo extension for hardware-accelerated display. Compatible but low-quality, with OSD and subtitle issues. For compatibility with old systems only.
+
+    ```bash
+    mpv --vo=xv video.mkv
+    ```
+  </Accordion>
+  <Accordion title="vaapi (Linux only)">
+    Intel VA API video output with hardware decoding support. Low quality with OSD issues. Prefer `--vo=gpu --hwdec=vaapi` instead.
+
+    ```bash
+    mpv --vo=vaapi video.mkv
+    ```
+  </Accordion>
+  <Accordion title="vdpau (Linux/X11 only)">
+    VDPAU display and optional hardware decoding. No reason to use this over `--vo=gpu --hwdec=nvdec`.
+
+    ```bash
+    mpv --vo=vdpau video.mkv
+    ```
+  </Accordion>
+  <Accordion title="drm (Linux, no desktop required)">
+    Direct Rendering Manager output using Kernel Mode Setting. Use when no graphical environment is installed. Does not support hardware acceleration (use the `drm` backend for `--vo=gpu` for that).
+
+    ```bash
+    mpv --vo=drm video.mkv
+    mpv --vo=drm --drm-connector=HDMI-A-1 video.mkv
+    ```
+  </Accordion>
+  <Accordion title="dmabuf-wayland (Wayland, experimental)">
+    Wayland output designed for DRM stateless or VA API hardware decoding. Avoids GPU-to-CPU copies. Requires `--hwdec=auto-safe` for best results.
+
+    <Warning>This driver is experimental and generally lower quality than `gpu`/`gpu-next`. Standard `--vo=gpu` and `--vo=gpu-next` switch to the appropriate Wayland context automatically.</Warning>
+  </Accordion>
+  <Accordion title="direct3d (Windows only)">
+    Uses the Direct3D interface. For systems without proper OpenGL drivers and where ANGLE does not perform well.
+
+    ```bash
+    mpv --vo=direct3d video.mkv
+    ```
+  </Accordion>
+  <Accordion title="sdl">
+    SDL 2.0+ render output. For systems where no proper graphics drivers are available.
+
+    ```bash
+    mpv --vo=sdl video.mkv
+    ```
+  </Accordion>
+</AccordionGroup>

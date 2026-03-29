@@ -1,0 +1,513 @@
+---
+title: "libmpv API"
+description: "Embed mpv as a playback backend in your application using the libmpv C API"
+---
+
+libmpv provides a C API for embedding mpv's playback engine into other applications. The API is licensed under ISC, while the mpv core itself is GPLv2+ by default (or LGPLv2.1+ when built with `-Dgpl=false`).
+
+<Note>
+The API version is encoded as `MPV_CLIENT_API_VERSION`. The current version is `MPV_MAKE_VERSION(2, 5)`. Changes to the C API are documented in `DOCS/client-api-changes.rst`.
+</Note>
+
+## Usage modes
+
+The client API can be used in two ways:
+
+<CardGroup cols={2}>
+  <Card title="Internal (scripting)" icon="code">
+    Used inside mpv itself — Lua scripts access the same API through an internal handle. No library linking is required.
+  </Card>
+  <Card title="External (embedding)" icon="plug">
+    Link against `libmpv` and call `mpv_create()` to embed mpv as a playback backend in your own application.
+  </Card>
+</CardGroup>
+
+## API lifecycle
+
+<Steps>
+  <Step title="Create an instance">
+    Call `mpv_create()` to allocate a new mpv instance. The instance is in a pre-initialized state — no playback occurs yet.
+
+    ```c
+    mpv_handle *mpv = mpv_create();
+    if (!mpv) {
+        // out of memory, or LC_NUMERIC is not "C"
+        exit(1);
+    }
+    ```
+  </Step>
+  <Step title="Set options">
+    Use `mpv_set_property()` or `mpv_set_property_string()` to configure the instance before initialization. Some options (e.g. `config`, `config-dir`, `input-conf`, `load-scripts`, `script`, `player-operation-mode`) must be set before `mpv_initialize()`.
+
+    ```c
+    mpv_set_property_string(mpv, "vo", "libmpv");
+    mpv_set_property_string(mpv, "config", "no");
+    ```
+  </Step>
+  <Step title="Initialize">
+    Call `mpv_initialize()` to start the player. After this point, most API functions become available.
+
+    ```c
+    if (mpv_initialize(mpv) < 0) {
+        // initialization failed
+        exit(1);
+    }
+    ```
+  </Step>
+  <Step title="Send commands">
+    Load files and control playback with `mpv_command()` or `mpv_command_string()`.
+
+    ```c
+    const char *cmd[] = {"loadfile", "myvideo.mkv", NULL};
+    mpv_command(mpv, cmd);
+    ```
+  </Step>
+  <Step title="Run the event loop">
+    Process events with `mpv_wait_event()`. This drives the player's interaction with your code.
+
+    ```c
+    while (1) {
+        mpv_event *event = mpv_wait_event(mpv, -1);
+        if (event->event_id == MPV_EVENT_SHUTDOWN)
+            break;
+        // handle other events...
+    }
+    ```
+  </Step>
+  <Step title="Destroy the instance">
+    Call `mpv_terminate_destroy()` to shut down the player and free all resources, or `mpv_destroy()` to detach the handle without forcing shutdown.
+
+    ```c
+    mpv_terminate_destroy(mpv);
+    ```
+  </Step>
+</Steps>
+
+## Core function signatures
+
+### Instance management
+
+```c
+// Create a new mpv instance (pre-initialized, not yet started)
+mpv_handle *mpv_create(void);
+
+// Initialize a created instance; must be called before most API use
+int mpv_initialize(mpv_handle *ctx);
+
+// Detach the handle; destroys the core if this was the last handle
+void mpv_destroy(mpv_handle *ctx);
+
+// Quit the player, wait for all handles to be destroyed, then return
+void mpv_terminate_destroy(mpv_handle *ctx);
+
+// Create an additional client handle connected to the same core
+mpv_handle *mpv_create_client(mpv_handle *ctx, const char *name);
+
+// Like mpv_create_client(), but the handle is a weak reference
+mpv_handle *mpv_create_weak_client(mpv_handle *ctx, const char *name);
+
+// Return the name of this client handle
+const char *mpv_client_name(mpv_handle *ctx);
+
+// Return the unique numeric ID of this client handle
+int64_t mpv_client_id(mpv_handle *ctx);
+
+// Return the compiled API version
+unsigned long mpv_client_api_version(void);
+```
+
+### Commands
+
+```c
+// Send a command as a NULL-terminated string array
+int mpv_command(mpv_handle *ctx, const char **args);
+
+// Send a command using input.conf parsing (enables OSD and string expansion)
+int mpv_command_string(mpv_handle *ctx, const char *args);
+
+// Send a command as a structured mpv_node
+int mpv_command_node(mpv_handle *ctx, mpv_node *args, mpv_node *result);
+
+// Like mpv_command(), but also returns result data
+int mpv_command_ret(mpv_handle *ctx, const char **args, mpv_node *result);
+
+// Send a command asynchronously; result is delivered as MPV_EVENT_COMMAND_REPLY
+int mpv_command_async(mpv_handle *ctx, uint64_t reply_userdata,
+                      const char **args);
+
+// Async version of mpv_command_node()
+int mpv_command_node_async(mpv_handle *ctx, uint64_t reply_userdata,
+                           mpv_node *args);
+
+// Signal async requests with the matching ID to abort
+void mpv_abort_async_command(mpv_handle *ctx, uint64_t reply_userdata);
+```
+
+### Properties
+
+Properties are runtime variables that control and report playback state. Writing to `pause` pauses playback; reading `time-pos` returns the current position.
+
+```c
+// Set a property (supports all mpv_format types)
+int mpv_set_property(mpv_handle *ctx, const char *name,
+                     mpv_format format, void *data);
+
+// Set a property to a string value
+int mpv_set_property_string(mpv_handle *ctx, const char *name,
+                             const char *data);
+
+// Delete a property (equivalent to "del [name]" command)
+int mpv_del_property(mpv_handle *ctx, const char *name);
+
+// Set a property asynchronously; result: MPV_EVENT_SET_PROPERTY_REPLY
+int mpv_set_property_async(mpv_handle *ctx, uint64_t reply_userdata,
+                            const char *name, mpv_format format, void *data);
+
+// Read a property value
+int mpv_get_property(mpv_handle *ctx, const char *name,
+                     mpv_format format, void *data);
+
+// Read a property value as a string (caller must mpv_free() the result)
+char *mpv_get_property_string(mpv_handle *ctx, const char *name);
+
+// Read a property value formatted for OSD display
+char *mpv_get_property_osd_string(mpv_handle *ctx, const char *name);
+
+// Read a property asynchronously; result: MPV_EVENT_GET_PROPERTY_REPLY
+int mpv_get_property_async(mpv_handle *ctx, uint64_t reply_userdata,
+                            const char *name, mpv_format format);
+
+// Watch a property; changes are reported as MPV_EVENT_PROPERTY_CHANGE
+int mpv_observe_property(mpv_handle *mpv, uint64_t reply_userdata,
+                          const char *name, mpv_format format);
+
+// Stop watching a property registered with the given reply_userdata
+int mpv_unobserve_property(mpv_handle *mpv,
+                            uint64_t registered_reply_userdata);
+```
+
+### Options
+
+```c
+// Load a config file (parses it as if mpv_set_option_string() was called)
+int mpv_load_config_file(mpv_handle *ctx, const char *filename);
+
+// Set an option before mpv_initialize() (semi-deprecated; prefer mpv_set_property())
+int mpv_set_option(mpv_handle *ctx, const char *name,
+                   mpv_format format, void *data);
+
+// Set an option to a string value
+int mpv_set_option_string(mpv_handle *ctx, const char *name, const char *data);
+```
+
+### Event loop
+
+```c
+// Block until an event is available, timeout expires, or mpv_wakeup() is called
+// Pass timeout=-1 to wait indefinitely; timeout=0 to poll without blocking
+mpv_event *mpv_wait_event(mpv_handle *ctx, double timeout);
+
+// Wake up a blocked mpv_wait_event() call from another thread
+void mpv_wakeup(mpv_handle *ctx);
+
+// Set a callback invoked when new events are available (do not call API from it)
+void mpv_set_wakeup_callback(mpv_handle *ctx, void (*cb)(void *d), void *d);
+
+// Block until all pending async requests have completed
+void mpv_wait_async_requests(mpv_handle *ctx);
+
+// Enable or disable a specific event type
+int mpv_request_event(mpv_handle *ctx, mpv_event_id event, int enable);
+
+// Enable log message delivery at the specified minimum level
+int mpv_request_log_messages(mpv_handle *ctx, const char *min_level);
+
+// Convert an mpv_event to an mpv_node map representation
+int mpv_event_to_node(mpv_node *dst, mpv_event *src);
+```
+
+### Hooks
+
+Hooks are synchronous events that block the player until your code calls `mpv_hook_continue()`.
+
+```c
+// Register a hook handler (priority 0 is neutral; lower priority runs first)
+int mpv_hook_add(mpv_handle *ctx, uint64_t reply_userdata,
+                 const char *name, int priority);
+
+// Signal that hook handling is complete and the player may continue
+int mpv_hook_continue(mpv_handle *ctx, uint64_t id);
+```
+
+### Time and memory
+
+```c
+// Internal time in nanoseconds (not related to playback position)
+int64_t mpv_get_time_ns(mpv_handle *ctx);
+
+// Same, in microseconds
+int64_t mpv_get_time_us(mpv_handle *ctx);
+
+// Free memory allocated by the API (e.g. strings from mpv_get_property_string)
+void mpv_free(void *data);
+
+// Free data referenced by an mpv_node (does not free the node itself)
+void mpv_free_node_contents(mpv_node *node);
+```
+
+## Property formats
+
+The `mpv_format` enum describes the data type used when getting or setting properties and options.
+
+| Format constant | C type | Notes |
+|---|---|---|
+| `MPV_FORMAT_NONE` | — | Invalid / empty |
+| `MPV_FORMAT_STRING` | `char *` | Raw property string (UTF-8) |
+| `MPV_FORMAT_OSD_STRING` | `char *` | Human-readable OSD string (read-only) |
+| `MPV_FORMAT_FLAG` | `int` | Boolean: `0` = no, `1` = yes |
+| `MPV_FORMAT_INT64` | `int64_t` | 64-bit integer |
+| `MPV_FORMAT_DOUBLE` | `double` | Floating-point |
+| `MPV_FORMAT_NODE` | `mpv_node` | Generic container; supports all formats |
+| `MPV_FORMAT_NODE_ARRAY` | `mpv_node_list *` | Array of `mpv_node` values |
+| `MPV_FORMAT_NODE_MAP` | `mpv_node_list *` | Key-value map of `mpv_node` values |
+| `MPV_FORMAT_BYTE_ARRAY` | `mpv_byte_array *` | Raw bytes (used by specific commands) |
+
+```c
+// Reading a double property
+double pos;
+mpv_get_property(mpv, "time-pos", MPV_FORMAT_DOUBLE, &pos);
+
+// Reading a flag property
+int paused;
+mpv_get_property(mpv, "pause", MPV_FORMAT_FLAG, &paused);
+
+// Reading a string property (must be freed)
+char *path = mpv_get_property_string(mpv, "path");
+printf("Playing: %s\n", path);
+mpv_free(path);
+```
+
+## Event types
+
+`mpv_wait_event()` returns a pointer to an `mpv_event` struct. Check `event->event_id` against the `mpv_event_id` enum.
+
+| Event | Description |
+|---|---|
+| `MPV_EVENT_NONE` | No event (timeout or spurious wakeup) |
+| `MPV_EVENT_SHUTDOWN` | The player is shutting down; call `mpv_destroy()` |
+| `MPV_EVENT_LOG_MESSAGE` | A log message (see `mpv_request_log_messages()`) |
+| `MPV_EVENT_GET_PROPERTY_REPLY` | Reply to `mpv_get_property_async()` |
+| `MPV_EVENT_SET_PROPERTY_REPLY` | Reply to `mpv_set_property_async()` |
+| `MPV_EVENT_COMMAND_REPLY` | Reply to `mpv_command_async()` |
+| `MPV_EVENT_START_FILE` | Playback of a new file is starting |
+| `MPV_EVENT_END_FILE` | Playback of a file has ended |
+| `MPV_EVENT_FILE_LOADED` | File headers read; decoding begins |
+| `MPV_EVENT_CLIENT_MESSAGE` | Received a `script-message` command |
+| `MPV_EVENT_VIDEO_RECONFIG` | Video output reconfigured (e.g. resolution change) |
+| `MPV_EVENT_AUDIO_RECONFIG` | Audio output reconfigured |
+| `MPV_EVENT_SEEK` | Seek was initiated; playback temporarily stopped |
+| `MPV_EVENT_PLAYBACK_RESTART` | Playback resumed after seek or start |
+| `MPV_EVENT_PROPERTY_CHANGE` | A watched property changed value |
+| `MPV_EVENT_QUEUE_OVERFLOW` | The event queue overflowed; events were dropped |
+| `MPV_EVENT_HOOK` | A registered hook was triggered |
+
+## Error handling
+
+All API functions that can fail return `int`. A return value `>= 0` indicates success; negative values are `mpv_error` codes.
+
+```c
+const char *mpv_error_string(int error);
+```
+
+| Error code | Value | Meaning |
+|---|---|---|
+| `MPV_ERROR_SUCCESS` | 0 | No error |
+| `MPV_ERROR_EVENT_QUEUE_FULL` | -1 | Client event queue overflowed |
+| `MPV_ERROR_NOMEM` | -2 | Memory allocation failed |
+| `MPV_ERROR_UNINITIALIZED` | -3 | Core not yet initialized |
+| `MPV_ERROR_INVALID_PARAMETER` | -4 | Invalid or unsupported parameter |
+| `MPV_ERROR_OPTION_NOT_FOUND` | -5 | Option does not exist |
+| `MPV_ERROR_OPTION_FORMAT` | -6 | Unsupported format for option |
+| `MPV_ERROR_OPTION_ERROR` | -7 | Option value could not be parsed |
+| `MPV_ERROR_PROPERTY_NOT_FOUND` | -8 | Property does not exist |
+| `MPV_ERROR_PROPERTY_FORMAT` | -9 | Unsupported format for property |
+| `MPV_ERROR_PROPERTY_UNAVAILABLE` | -10 | Property exists but is not available |
+| `MPV_ERROR_PROPERTY_ERROR` | -11 | Error getting or setting property |
+| `MPV_ERROR_COMMAND` | -12 | Command execution error |
+| `MPV_ERROR_LOADING_FAILED` | -13 | File loading error |
+| `MPV_ERROR_AO_INIT_FAILED` | -14 | Audio output initialization failed |
+| `MPV_ERROR_VO_INIT_FAILED` | -15 | Video output initialization failed |
+| `MPV_ERROR_NOTHING_TO_PLAY` | -16 | No audio or video streams found |
+| `MPV_ERROR_UNKNOWN_FORMAT` | -17 | File format could not be determined |
+| `MPV_ERROR_UNSUPPORTED` | -18 | System requirements not met |
+| `MPV_ERROR_NOT_IMPLEMENTED` | -19 | Function is a stub |
+| `MPV_ERROR_GENERIC` | -20 | Unspecified error |
+
+## Minimal example
+
+```c
+#include <stdio.h>
+#include <mpv/client.h>
+
+int main(void) {
+    mpv_handle *mpv = mpv_create();
+    if (!mpv) return 1;
+
+    // Optional: suppress terminal output (enabled by default in libmpv mode)
+    mpv_set_property_string(mpv, "terminal", "no");
+
+    if (mpv_initialize(mpv) < 0) return 1;
+
+    const char *cmd[] = {"loadfile", "myvideo.mkv", NULL};
+    mpv_command(mpv, cmd);
+
+    while (1) {
+        mpv_event *event = mpv_wait_event(mpv, -1);
+        if (event->event_id == MPV_EVENT_SHUTDOWN)
+            break;
+        if (event->event_id == MPV_EVENT_END_FILE) {
+            mpv_event_end_file *ef = event->data;
+            if (ef->reason == MPV_END_FILE_REASON_EOF)
+                printf("Playback ended.\n");
+        }
+    }
+
+    mpv_terminate_destroy(mpv);
+    return 0;
+}
+```
+
+Compile with:
+
+```bash
+gcc -o player player.c $(pkg-config --libs --cflags mpv)
+```
+
+## Rendering API
+
+The render API (`render.h`) lets you drive video rendering from your own OpenGL (or software) context instead of letting mpv create its own window.
+
+### Key functions
+
+```c
+// Create a render context (call before playback starts)
+int mpv_render_context_create(mpv_render_context **res, mpv_handle *mpv,
+                               mpv_render_param *params);
+
+// Set a callback invoked when a new frame is ready to render
+void mpv_render_context_set_update_callback(mpv_render_context *ctx,
+                                             mpv_render_update_fn callback,
+                                             void *callback_ctx);
+
+// Query what should happen next (returns mpv_render_update_flag bitmask)
+uint64_t mpv_render_context_update(mpv_render_context *ctx);
+
+// Render the current video frame to the target surface
+int mpv_render_context_render(mpv_render_context *ctx, mpv_render_param *params);
+
+// Notify mpv that a frame was displayed (helps with A/V sync)
+void mpv_render_context_report_swap(mpv_render_context *ctx);
+
+// Destroy the render context
+void mpv_render_context_free(mpv_render_context *ctx);
+```
+
+### OpenGL rendering
+
+Include `render_gl.h` and use `MPV_RENDER_API_TYPE_OPENGL`. You must supply a `get_proc_address` callback so mpv can resolve GL function pointers without linking to a GL library directly.
+
+```c
+#include <mpv/render_gl.h>
+
+static void *get_proc_address(void *ctx, const char *name) {
+    // e.g. return SDL_GL_GetProcAddress(name);
+    return your_gl_get_proc_address(name);
+}
+
+// Create OpenGL render context
+mpv_opengl_init_params gl_params = {
+    .get_proc_address = get_proc_address,
+    .get_proc_address_ctx = NULL,
+};
+
+mpv_render_param params[] = {
+    {MPV_RENDER_PARAM_API_TYPE,          (void *)MPV_RENDER_API_TYPE_OPENGL},
+    {MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &gl_params},
+    {MPV_RENDER_PARAM_ADVANCED_CONTROL,  &(int){1}},
+    {0},
+};
+
+mpv_render_context *render_ctx;
+mpv_render_context_create(&render_ctx, mpv, params);
+
+// Render a frame to FBO 0 at 1920x1080
+mpv_opengl_fbo fbo = {.fbo = 0, .w = 1920, .h = 1080};
+int flip_y = 1; // OpenGL default framebuffer is y-flipped
+mpv_render_param render_params[] = {
+    {MPV_RENDER_PARAM_OPENGL_FBO, &fbo},
+    {MPV_RENDER_PARAM_FLIP_Y,     &flip_y},
+    {0},
+};
+mpv_render_context_render(render_ctx, render_params);
+```
+
+<Tip>
+Render on a dedicated thread. Calling normal libmpv API functions from the render thread can cause deadlocks. See the Threading section in `render.h` for the full list of safe functions.
+</Tip>
+
+## Stream callbacks
+
+`stream_cb.h` lets you register a custom URL protocol backed by your own read/seek/size/close callbacks, so mpv can play from any data source.
+
+```c
+#include <mpv/stream_cb.h>
+
+// Register a protocol prefix (e.g. "mystream://")
+int mpv_stream_cb_add_ro(mpv_handle *ctx, const char *protocol,
+                          void *user_data,
+                          mpv_stream_cb_open_ro_fn open_fn);
+```
+
+Your `open_fn` receives the URI and fills an `mpv_stream_cb_info` struct with callback pointers:
+
+| Callback | Signature | Required |
+|---|---|---|
+| `read_fn` | `int64_t (*)(void *cookie, char *buf, uint64_t nbytes)` | Yes |
+| `close_fn` | `void (*)(void *cookie)` | Yes |
+| `seek_fn` | `int64_t (*)(void *cookie, int64_t offset)` | No |
+| `size_fn` | `int64_t (*)(void *cookie)` | No |
+| `cancel_fn` | `void (*)(void *cookie)` | No (since API 1.106) |
+
+<Warning>
+Custom stream callbacks must not call libmpv API functions — doing so will deadlock.
+</Warning>
+
+## Thread safety
+
+The client API is fully thread-safe unless otherwise noted. However, only one thread may call `mpv_wait_event()` on a given handle at a time. Functions that are explicitly safe to call from the render thread are annotated with "Safe to be called from mpv render API threads" in `client.h`.
+
+## Environment requirements
+
+- `LC_NUMERIC` must be set to `"C"`. If you call `setlocale(LC_ALL, ...)`, reset it: `setlocale(LC_NUMERIC, "C")`.
+- The FPU precision must be at least double.
+- On Windows, mpv calls `timeBeginPeriod(1)`.
+- Do not override `SIGCHLD` or call `wait()` for all PIDs — mpv manages its own child processes.
+- If your code sets signal handlers, use the `SA_RESTART` flag.
+
+## Language bindings
+
+Community-maintained bindings are available for several languages:
+
+<CardGroup cols={3}>
+  <Card title="Python" icon="python" href="https://github.com/jaseg/python-mpv">
+    python-mpv — ctypes-based bindings
+  </Card>
+  <Card title="Rust" icon="code" href="https://github.com/ParadoxSpiral/libmpv-rs">
+    libmpv-rs — safe Rust bindings
+  </Card>
+  <Card title="Go" icon="code" href="https://github.com/dexterlb/mpvipc">
+    mpvipc — Go IPC client
+  </Card>
+</CardGroup>
+
+See the [mpv wiki](https://github.com/mpv-player/mpv/wiki) for a more complete list of bindings and example projects.

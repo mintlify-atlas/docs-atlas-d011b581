@@ -1,0 +1,341 @@
+---
+title: "JSON IPC Protocol"
+description: "Control mpv externally via the JSON IPC socket interface"
+---
+
+mpv exposes a JSON-based IPC protocol over a Unix socket (Linux/macOS) or a named pipe (Windows). External programs can connect, send commands, and receive both responses and asynchronous events.
+
+<Warning>
+  The IPC protocol is not designed to be a secure network protocol. There is no authentication and no encryption, and commands like `run` can execute arbitrary system programs. Use it only for local control of mpv.
+</Warning>
+
+## Enabling the IPC server
+
+There are two ways to connect to the IPC interface:
+
+- **`--input-ipc-server=<path>`** — mpv creates and listens on a Unix socket (Linux/macOS) or named pipe (Windows) at the given path. External programs connect to it.
+- **`--input-ipc-client=<fd>`** — mpv connects to an already-open Unix socket or named pipe specified by its file descriptor number. The connection is established at startup.
+
+<Tabs>
+  <Tab title="Linux / macOS">
+    Pass a socket path with `--input-ipc-server`:
+
+    ```bash
+    mpv file.mkv --input-ipc-server=/tmp/mpvsocket
+    ```
+
+    You can also add it permanently to `~/.config/mpv/mpv.conf`:
+
+    ```ini
+    input-ipc-server=/tmp/mpvsocket
+    ```
+
+    Use `--idle` to keep mpv open when no file is playing, which is useful for scripted control:
+
+    ```bash
+    mpv --idle --input-ipc-server=/tmp/mpvsocket
+    ```
+  </Tab>
+  <Tab title="Windows">
+    Use a named pipe path:
+
+    ```bat
+    mpv file.mkv --input-ipc-server=\\.\pipe\mpvsocket
+    ```
+
+    Sending text-only commands from a command prompt:
+
+    ```bat
+    echo show-text ${playback-time} >\\.\pipe\mpvsocket
+    ```
+
+    For bidirectional communication (reading replies), you need a program that uses overlapped I/O or a wrapper like .NET's `NamedPipeClientStream`. PuTTY can open the pipe as a "serial" device for interactive testing.
+  </Tab>
+</Tabs>
+
+---
+
+## Protocol
+
+The protocol transmits UTF-8 JSON. Each message — command, reply, or event — is a single line terminated by `\n`. The `\n` character must not appear inside a message (minify JSON before sending).
+
+### Sending a command
+
+```json
+{ "command": ["command_name", "param1", "param2"] }
+```
+
+Parameters are native JSON values (strings, numbers, booleans). The command name is always the first element.
+
+### Receiving a reply
+
+```json
+{ "error": "success", "data": null }
+```
+
+`"error": "success"` means the command completed without error. `data` holds the command's return value (can be `null`).
+
+### Using `request_id`
+
+Because events can arrive at any time, it can be hard to match replies to commands. Include an integer `request_id` and mpv will echo it back:
+
+```json
+{ "command": ["get_property", "time-pos"], "request_id": 100 }
+```
+
+```json
+{ "error": "success", "data": 1.468135, "request_id": 100 }
+```
+
+`request_id` must be an integer in the range `−2^63..2^63−1`. If omitted, replies set it to `0`.
+
+### Events
+
+mpv sends events as unsolicited JSON lines:
+
+```json
+{ "event": "pause" }
+{ "event": "end-file", "reason": "eof" }
+```
+
+Events can arrive at any time, interleaved with command replies.
+
+---
+
+## socat example (Linux/macOS)
+
+```bash
+# Start mpv
+mpv file.mkv --input-ipc-server=/tmp/mpvsocket
+
+# In another terminal — get playback time
+echo '{ "command": ["get_property", "playback-time"] }' | socat - /tmp/mpvsocket
+# {"data":190.482000,"error":"success"}
+
+# Set volume
+echo '{ "command": ["set_property", "volume", 80] }' | socat - /tmp/mpvsocket
+# {"data":null,"error":"success"}
+
+# Pause
+echo '{ "command": ["set_property", "pause", true] }' | socat - /tmp/mpvsocket
+```
+
+You can also send plain text commands (no JSON, no reply):
+
+```bash
+echo 'show-text ${playback-time}' | socat - /tmp/mpvsocket
+```
+
+Lines starting with `#` and empty lines are ignored. Any line whose first non-whitespace character is not `{` is treated as a text command.
+
+---
+
+## IPC commands
+
+In addition to the standard [input commands](/scripting/input-commands), these commands are available exclusively through the IPC protocol:
+
+<AccordionGroup>
+  <Accordion title="get_property">
+    Return the value of a property as a native JSON type.
+
+    ```json
+    { "command": ["get_property", "volume"] }
+    { "data": 50.0, "error": "success" }
+    ```
+  </Accordion>
+
+  <Accordion title="get_property_string">
+    Return the value of a property always as a string.
+
+    ```json
+    { "command": ["get_property_string", "volume"] }
+    { "data": "50.000000", "error": "success" }
+    ```
+  </Accordion>
+
+  <Accordion title="set_property">
+    Set a property to the given value.
+
+    ```json
+    { "command": ["set_property", "pause", true] }
+    { "error": "success" }
+
+    { "command": ["set_property", "volume", 75] }
+    { "error": "success" }
+    ```
+
+    `set_property_string` is an alias; both accept native values and strings.
+  </Accordion>
+
+  <Accordion title="observe_property">
+    Subscribe to property changes. Whenever the property changes, a `property-change` event is sent with the numeric `id` you specified.
+
+    ```json
+    { "command": ["observe_property", 1, "volume"] }
+    { "error": "success" }
+    { "event": "property-change", "id": 1, "data": 52.0, "name": "volume" }
+    ```
+
+    <Warning>
+      Property observation only works while the IPC connection remains open. Each `socat` invocation creates a separate connection that is immediately closed, so `observe_property` will not work across multiple `socat` calls. Keep a single persistent connection open.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="observe_property_string">
+    Like `observe_property`, but the event `data` field is always a string.
+
+    ```json
+    { "command": ["observe_property_string", 1, "volume"] }
+    { "error": "success" }
+    { "event": "property-change", "id": 1, "data": "52.000000", "name": "volume" }
+    ```
+  </Accordion>
+
+  <Accordion title="unobserve_property">
+    Cancel a property observation using the numeric ID from the original `observe_property` call.
+
+    ```json
+    { "command": ["unobserve_property", 1] }
+    { "error": "success" }
+    ```
+  </Accordion>
+
+  <Accordion title="client_name">
+    Return the name of the IPC client connection. This is `ipc-N` where N is an integer.
+
+    ```json
+    { "command": ["client_name"] }
+    { "data": "ipc-1", "error": "success" }
+    ```
+  </Accordion>
+
+  <Accordion title="get_time_us">
+    Return the current mpv internal time in microseconds.
+
+    ```json
+    { "command": ["get_time_us"] }
+    { "data": 1712345678901234, "error": "success" }
+    ```
+  </Accordion>
+
+  <Accordion title="request_log_messages">
+    Enable delivery of mpv log messages as events. The argument is the minimum log level.
+
+    ```json
+    { "command": ["request_log_messages", "warn"] }
+    ```
+
+    Log messages arrive as `log-message` events with `prefix`, `level`, and `text` fields. These are intended for human reading, not machine parsing.
+  </Accordion>
+
+  <Accordion title="enable_event / disable_event">
+    Enable or disable specific events by name. Use `"all"` to affect all events at once.
+
+    ```json
+    { "command": ["disable_event", "tick"] }
+    { "command": ["enable_event", "all"] }
+    ```
+  </Accordion>
+
+  <Accordion title="get_version">
+    Return the client API version of the running mpv instance.
+
+    ```json
+    { "command": ["get_version"] }
+    { "data": 2003000, "error": "success" }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Asynchronous commands
+
+Commands normally block until completion. Add `"async": true` to run a command asynchronously — the response arrives when the command finishes, regardless of order:
+
+```json
+{ "command": ["screenshot"], "request_id": 123, "async": true }
+```
+
+```json
+{ "request_id": 123, "error": "success", "data": null }
+```
+
+No confirmation is sent that the command started. If the command is long-running, the reply will not arrive until it completes.
+
+---
+
+## Named arguments
+
+Instead of an array, the `command` field can be a JSON object, which passes named arguments:
+
+```json
+{
+  "command": {
+    "name": "subprocess",
+    "args": ["notify-send", "mpv", "done"],
+    "playback_only": false
+  },
+  "request_id": 42
+}
+```
+
+Named arguments are supported only for "proper" commands (those listed in the [input commands reference](/scripting/input-commands)), not for special protocol-only commands like `get_property`.
+
+---
+
+## Data flow
+
+- Replies to IPC messages are sent in sequence.
+- While a command executes, the server does not process additional messages. Events that occurred during execution are queued and sent after the reply.
+- You may read unrelated event messages before a command reply — they were queued before your command was processed.
+- Asynchronous commands do not block IPC interaction while executing.
+
+---
+
+## UTF-8 notes
+
+All strings are normally UTF-8. In some edge cases (file tags, filenames on Unix), mpv may send invalid UTF-8. If your JSON parser is strict, filter raw bytes for invalid sequences before parsing.
+
+mpv will never construct invalid UTF-8 using `\u` escape sequences, including surrogate pairs.
+
+---
+
+## JSON extensions
+
+mpv accepts these non-standard extensions in JSON it receives:
+
+- Trailing commas in arrays and objects
+- `=` as an alternative to `:` in object entries
+- Unquoted object keys (if they start with `A-Za-z_` and contain only `A-Za-z0-9_`)
+- `\xAB` byte escapes (two hex digits)
+
+Example — these two are equivalent:
+
+```json
+{ "objkey": "value\n" }
+{ objkey = "value\x0A" }
+```
+
+---
+
+## Anonymous IPC connections via `.run` scripts
+
+You can start a process that receives an IPC connection without configuring `--input-ipc-server`. Place a file with a `.run` extension in the mpv scripts directory. mpv executes it as a native process (it must have a shebang and the executable bit set).
+
+The IPC socket file descriptor is passed via the `--mpv-ipc-fd=N` command-line argument. The rest of the protocol is identical to a normal `--input-ipc-server` connection.
+
+```bash
+#!/bin/bash
+# ~/.config/mpv/scripts/my-controller.run
+# Receives --mpv-ipc-fd=N as argument
+
+FD="${1#--mpv-ipc-fd=}"
+echo '{"command":["get_property","filename"]}' >&$FD
+read -r reply <&$FD
+echo "playing: $reply"
+```
+
+<Note>
+  Anonymous IPC connections via `.run` scripts do not work on Windows.
+</Note>

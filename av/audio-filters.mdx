@@ -1,0 +1,236 @@
+---
+title: "Audio Filters"
+description: "Apply audio filters for encoding, resampling, and processing"
+---
+
+Audio filters let you modify the audio stream before it reaches the audio output. The filter chain syntax is identical to [video filters](/av/video-filters).
+
+```bash
+mpv --af=<filter1[=param1:param2],filter2,...> audio.flac
+```
+
+<Tip>Run `mpv --af=help` to list all available audio filters. Most filters are available via the `lavfi` wrapper, which exposes all of libavfilter's audio filters.</Tip>
+
+## Filter chain syntax
+
+The syntax for `--af` is the same as `--vf`. See [video filters](/av/video-filters) for full details on labels, the `!` prefix for disabled-by-default filters, and runtime toggling.
+
+```bash
+# Single filter
+mpv --af=scaletempo2 audio.flac
+
+# Filter chain
+mpv --af=scaletempo2,lavfi=loudnorm audio.flac
+
+# Add to an existing filter list
+mpv --af-add=rubberband audio.flac
+```
+
+Filter list management options: `--af-add`, `--af-pre`, `--af-clr`. See `--vf` group of options for their behavior.
+
+## Available filters
+
+### lavcac3enc — AC-3 encoding
+
+Encodes multi-channel audio to AC-3 at runtime using libavcodec. Supports up to 6 channels. Output is big-endian for raw AC-3, or native-endian for S/PDIF. Input is resampled to 48 kHz, 44.1 kHz, or 32 kHz if needed.
+
+```bash
+# Encode to AC-3 and output via S/PDIF (default)
+mpv --af=lavcac3enc audio.flac
+
+# Raw AC-3 stream output
+mpv --af=lavcac3enc=tospdif=no audio.flac
+
+# Set bitrate to 384 kbps
+mpv --af=lavcac3enc=bitrate=384 audio.flac
+```
+
+| Parameter | Description |
+|---|---|
+| `tospdif=<yes\|no>` | Output via S/PDIF passthrough (`yes`, default) or raw AC-3 stream (`no`) |
+| `bitrate=<rate>` | Bitrate in kbps (default: 640). Valid values: 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512, 576, 640. Use `auto` to select based on channel count. |
+| `minch=<n>` | Detach filter if input has fewer than `n` channels (default: 3) |
+| `encoder=<name>` | libavcodec encoder to use (must be an AC-3 encoder) |
+
+**Auto bitrate by channel count:**
+
+| Channels | Bitrate |
+|---|---|
+| 1 | 96 kbps |
+| 2 | 192 kbps |
+| 3 | 224 kbps |
+| 4 | 384 kbps |
+| 5–6 | 448 kbps |
+
+### format — audio format control
+
+Forces a specific audio format, sample rate, or channel layout. Does not perform conversion itself; it instructs the filter system to insert necessary conversion filters.
+
+```bash
+# Force 48000 Hz sample rate
+mpv --af=format=srate=48000 audio.flac
+
+# Force stereo output
+mpv --af=format=channels=stereo audio.flac
+
+# List available formats
+mpv --af=format=format=help
+```
+
+| Parameter | Description |
+|---|---|
+| `format` | Force a specific sample format (e.g. `s16`, `float`) |
+| `srate` | Force a specific sample rate (e.g. `48000`) |
+| `channels` | Force a specific channel layout |
+
+<Note>To control audio output format (as opposed to mid-chain format), use `--audio-format`, `--audio-samplerate`, and `--audio-channels` instead.</Note>
+
+### scaletempo — tempo scaling (legacy)
+
+Scales audio tempo without altering pitch, optionally synced to playback speed. Uses a time-domain WSOLA-like algorithm.
+
+```bash
+# Play at 1.2x speed with normal pitch
+mpv --af=scaletempo --speed=1.2 audio.flac
+
+# Sync tempo to speed, but don't respond to speed changes
+mpv --af=scaletempo=scale=1.2:speed=none --speed=1.2 audio.flac
+```
+
+| Parameter | Default | Description |
+|---|---|---|
+| `scale=<amount>` | 1.0 | Additional tempo scale factor |
+| `stride=<ms>` | 60 | Output stride length in milliseconds |
+| `overlap=<factor>` | 0.20 | Overlap fraction of stride |
+| `search=<ms>` | 14 | Search length for best overlap position |
+| `speed=<tempo\|pitch\|both\|none>` | `tempo` | How to respond to speed changes: `tempo` (scale tempo), `pitch` (scale pitch instead, loses video sync), `both`, or `none` |
+
+### scaletempo2 — tempo scaling (recommended, default)
+
+Scales audio tempo without altering pitch using the WSOLA (Waveform Similarity Overlap-and-Add) algorithm, ported from Chromium. Higher audio quality than `scaletempo` and `rubberband` R2 engine.
+
+This filter is inserted automatically when `--audio-pitch-correction` is enabled (the default) and playback speed changes.
+
+```bash
+mpv --af=scaletempo2 --speed=1.5 audio.flac
+```
+
+| Parameter | Default | Description |
+|---|---|---|
+| `min-speed=<speed>` | 0.25 | Mute audio below this playback speed |
+| `max-speed=<speed>` | 8.0 | Mute audio above this playback speed (0 = disabled) |
+| `search-interval=<ms>` | 40 | Length in ms to search for best overlap position |
+| `window-size=<ms>` | 12 | Length in ms of the overlap-and-add window |
+
+### rubberband — high-quality pitch correction
+
+High-quality pitch correction using librubberband. Can replace `scaletempo` and `scaletempo2`, and supports pitch adjustment independent of speed.
+
+```bash
+mpv --af=rubberband --speed=1.5 audio.flac
+
+# Adjust pitch upward by a musical semitone
+mpv --af=rubberband=pitch-scale=1.059463 audio.flac
+```
+
+| Parameter | Description |
+|---|---|
+| `pitch-scale=<amount>` | Pitch scaling factor; frequencies are multiplied by this value (default: 1.0) |
+| `engine=<faster\|finer>` | Rubberband engine: `faster` (R2, less CPU) or `finer` (R3, higher quality — default if librubberband ≥ 3) |
+
+List all available rubberband sub-options:
+
+```bash
+mpv --af=rubberband=help
+```
+
+**Runtime commands** (via `af-command`):
+
+- `set-pitch <value>` — Change `pitch-scale` dynamically at runtime
+- `multiply-pitch <factor>` — Multiply the current `pitch-scale` dynamically
+
+**Example `input.conf` for semitone pitch stepping:**
+
+```ini
+[ multiply speed 0.9438743126816935
+] multiply speed 1.059463094352953
+```
+
+### lavfi — libavfilter wrapper
+
+Filters audio using FFmpeg's libavfilter. Provides access to all of libavfilter's audio filters.
+
+```bash
+mpv --af='lavfi=loudnorm' audio.flac
+
+# EQ: boost bass by 5 dB below 200 Hz
+mpv --af='lavfi=equalizer=f=200:width_type=h:width=200:g=5' audio.flac
+
+# Normalize loudness
+mpv --af='lavfi=loudnorm=I=-16:TP=-1.5:LRA=11' audio.flac
+```
+
+<Warning>Quote libavfilter graphs to avoid conflicts with mpv's own syntax. Use the same quoting strategies as described in the [video filters lavfi section](/av/video-filters#lavfi--libavfilter-wrapper).</Warning>
+
+Additional options:
+
+| Parameter | Description |
+|---|---|
+| `o=<string>` | AVOptions passed to the filter graph |
+| `fix-pts=<yes\|no>` | Compute PTS from sample count instead of relying on libavfilter (default: no). Use for filters that reset or recompute PTS. |
+
+### drop — frame dropping for SPDIF
+
+Drops or repeats audio frames to adapt to playback speed. Operates on full audio frames, designed for S/PDIF (compressed audio passthrough). Used automatically with `--video-sync=display-adrop`.
+
+<Warning>This filter is extremely low quality. Do not use it unless you have a specific need for S/PDIF with `display-adrop`.</Warning>
+
+## Common use cases
+
+<AccordionGroup>
+  <Accordion title="Tempo-correct playback at 1.5x speed">
+    ```bash
+    # scaletempo2 is used automatically, but you can be explicit:
+    mpv --speed=1.5 audio.flac
+
+    # Or force rubberband for higher quality:
+    mpv --af=rubberband --speed=1.5 audio.flac
+    ```
+  </Accordion>
+  <Accordion title="Encode multi-channel audio to AC-3 for S/PDIF">
+    ```bash
+    mpv --af=lavcac3enc audio.mkv
+    ```
+
+    This is useful when your audio output device requires AC-3 but the source file is in a different multichannel format.
+  </Accordion>
+  <Accordion title="Loudness normalization with EBU R128">
+    ```bash
+    mpv --af='lavfi=loudnorm=I=-16:TP=-1.5:LRA=11' audio.flac
+    ```
+  </Accordion>
+  <Accordion title="Parametric EQ">
+    ```bash
+    # 5 dB boost at 100 Hz with 50 Hz bandwidth
+    mpv --af='lavfi=equalizer=f=100:width_type=h:width=50:g=5' audio.flac
+    ```
+  </Accordion>
+  <Accordion title="Change audio pitch without changing speed">
+    ```bash
+    # Shift pitch up by one semitone
+    mpv --af=rubberband=pitch-scale=1.059463 audio.flac
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Filter help
+
+```bash
+# List all available audio filters
+mpv --af=help
+
+# Show parameters for a specific filter
+mpv --af=scaletempo=help
+```
+
+For libavfilter audio filters, refer to the [FFmpeg filter documentation](https://ffmpeg.org/ffmpeg-filters.html).

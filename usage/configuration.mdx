@@ -1,0 +1,298 @@
+---
+title: "Configuration"
+description: "Config files, profiles, and per-file options"
+---
+
+mpv reads configuration from files on startup. Options set in config files use the same names as command-line options, but without the leading `--`. Command-line options override config file settings.
+
+## Config file locations
+
+<Tabs>
+  <Tab title="Linux / macOS">
+    | File | Purpose |
+    |------|---------|
+    | `~/.config/mpv/mpv.conf` | User configuration (highest priority) |
+    | `/etc/mpv/mpv.conf` | System-wide configuration |
+    | `/usr/local/etc/mpv/mpv.conf` | System-wide configuration (alternative) |
+
+    The `XDG_CONFIG_HOME` environment variable overrides the config directory. If set, mpv uses `$XDG_CONFIG_HOME/mpv/` instead of `~/.config/mpv/`.
+
+    Setting `MPV_HOME` overrides everything: mpv looks for `$MPV_HOME/mpv.conf`.
+  </Tab>
+  <Tab title="Windows">
+    | File | Purpose |
+    |------|---------|
+    | `%APPDATA%\mpv\mpv.conf` | User configuration |
+
+    The full path is typically:
+
+    ```
+    C:\Users\USERNAME\AppData\Roaming\mpv\mpv.conf
+    ```
+
+    Find the exact path by running `echo %APPDATA%\mpv\mpv.conf` in `cmd.exe`.
+
+    If a `portable_config\` directory exists next to `mpv.exe`, all configuration is loaded exclusively from there.
+  </Tab>
+  <Tab title="macOS">
+    | File | Purpose |
+    |------|---------|
+    | `~/.config/mpv/mpv.conf` | User configuration |
+
+    The cache directory is `~/Library/Caches/io.mpv/`. The watch-later directory is `~/.config/mpv/watch_later/`. These locations cannot be overridden by environment variables on macOS (unlike Linux).
+  </Tab>
+</Tabs>
+
+## Syntax
+
+The configuration file syntax is `option=value`. Lines beginning with `#` are comments.
+
+```ini
+# This is a comment
+fs=yes
+volume=80
+osd-playing-msg=File: ${filename}
+```
+
+Key rules:
+
+- Drop the `--` prefix from command-line options: `--fs` becomes `fs`.
+- Flag options can be enabled by setting them to `yes`, or just by specifying the option name alone (`hwdec` implies `hwdec=yes`).
+- Flag options are disabled with `no`: `fs=no`.
+- Values do not need to be quoted unless they contain `#`, leading/trailing whitespace, or start with `"`, `'`, or `%`.
+- You cannot use `--option=value` syntax inside config files.
+
+```ini
+# Correct
+autofit-larger=90%x90%
+hwdec
+osd-playing-msg=File: ${filename}
+
+# Wrong — do not use -- prefix in config files
+--fs=yes
+```
+
+## Config directory structure
+
+```
+~/.config/mpv/
+├── mpv.conf              # Main config file
+├── input.conf            # Custom key bindings
+├── scripts/              # Lua/JavaScript scripts (auto-loaded alphabetically)
+├── script-opts/          # Options files for scripts (e.g. osc.conf, stats.conf)
+├── fonts/                # Extra subtitle/OSD fonts
+└── subfont.ttf           # Fallback subtitle font
+
+~/.local/state/mpv/
+└── watch_later/          # Resume-position files (one per media file, hashed filename)
+```
+
+<Note>
+  On Linux, the watch-later directory follows the XDG state directory convention at `~/.local/state/mpv/watch_later/`. On macOS it is at `~/.config/mpv/watch_later/`. On Windows it is at `%LOCALAPPDATA%\mpv\watch_later`. The location can be overridden by setting `$XDG_STATE_HOME` (Linux) or `$MPV_HOME` (all platforms).
+</Note>
+
+All `.lua` and `.js` files placed in `~/.config/mpv/scripts/` are automatically loaded as if passed to `--script`. Use `--load-scripts=no` to disable this behavior.
+
+## Annotated mpv.conf example
+
+```ini
+##################
+# Video settings #
+##################
+
+# Start in fullscreen mode
+#fs=yes
+
+# Limit window size to 90% of the screen
+autofit-larger=90%x90%
+
+# Keep the window open after playback ends
+#keep-open=yes
+
+# Enable hardware decoding when available
+hwdec=auto
+
+# High-quality rendering preset (requires gpu or gpu-next VO)
+#profile=high-quality
+
+# Force display-synced video for smoother playback
+# (may cause issues with some drivers)
+#video-sync=display-resample
+
+##################
+# Audio settings #
+##################
+
+# Set the default audio output device
+#audio-device=alsa/default
+
+# Preferred audio language (falls back to English)
+#alang=fi,en
+
+##################
+# Subtitle settings #
+##################
+
+# Preferred subtitle language
+#slang=en
+
+# Subtitle encoding for Arabic text
+#sub-codepage=cp1256
+
+##################
+# Cache settings #
+##################
+
+# Large seekable RAM cache (useful for network streams)
+#cache=yes
+#demuxer-max-bytes=500M
+#demuxer-max-back-bytes=100M
+
+##################
+# Other settings #
+##################
+
+# Pretend to be a browser (fixes some streaming sites)
+#user-agent="Mozilla/5.0"
+
+# Show the filename in the OSD when playback starts
+osd-playing-msg=${filename}
+```
+
+## Profiles
+
+Profiles group a set of options under a named section. A profile begins with its name in square brackets. Options that follow belong to that profile until the next profile section or end of file.
+
+```ini
+# This option applies globally (default profile)
+fullscreen=yes
+
+# Enable with: mpv --profile=big-cache movie.mkv
+[big-cache]
+cache=yes
+demuxer-max-bytes=512MiB
+demuxer-readahead-secs=20
+
+# Enable with: mpv --profile=network video_url
+[network]
+profile-desc="Settings for network content"
+force-window=immediate
+profile=big-cache
+
+[reduce-judder]
+video-sync=display-resample
+interpolation=yes
+```
+
+Apply a profile on the command line with `--profile=<name>`:
+
+```bash
+mpv --profile=big-cache large-file.mkv
+mpv --profile=network https://example.com/stream.m3u8
+```
+
+List all available profiles:
+
+```bash
+mpv --profile=help
+```
+
+Show the contents of a profile:
+
+```bash
+mpv --show-profile=high-quality
+```
+
+### Built-in profiles
+
+mpv ships several built-in profiles you can apply directly:
+
+| Profile | Description |
+|---------|-------------|
+| `fast` | Optimized for low-power hardware. Uses bilinear scaling, disables dithering and advanced downscaling. |
+| `high-quality` | Superior image quality. Uses `ewa_lanczossharp` scaling with anti-ringing and HDR peak detection. |
+| `low-latency` | Minimizes buffering and latency for live streams and camera inputs. |
+| `gpu-hq` | Deprecated alias for `high-quality`. |
+
+```bash
+mpv --profile=fast video.mkv
+mpv --profile=high-quality movie.mkv
+mpv --profile=low-latency av://v4l2:/dev/video0 --untimed
+```
+
+## Conditional auto-profiles
+
+Profiles with a `profile-cond` option are applied automatically when their condition evaluates to true. The condition is a Lua expression that can reference mpv properties.
+
+```ini
+# Apply when video width is 1280 or more (HD)
+[hd-video]
+profile-desc=HD video
+profile-cond=width >= 1280
+deband=yes
+
+# Apply for YouTube URLs
+[youtube]
+profile-cond=path:find('youtu%.?be')
+gamma=20
+
+# Apply when fullscreen (and restore when leaving fullscreen)
+[fullscreen-effects]
+profile-cond=fullscreen
+profile-restore=copy
+vf-add=rotate=PI/2
+```
+
+<Warning>
+  Conditions that reference frequently-changing properties like `playback_time`
+  are re-evaluated on every change. Avoid using such properties in conditions
+  to prevent performance issues.
+</Warning>
+
+Use `p.property_name` or `get("property-name", default)` for more robust property access. Underscores in identifiers are automatically converted to hyphens when looking up properties.
+
+## Per-file configuration files
+
+To apply specific options to one file, create a companion config file named `<filename>.conf` in the same directory as the media file, or in `~/.config/mpv/`.
+
+You must also enable file-directory config loading:
+
+```ini
+# In mpv.conf
+use-filedir-conf=yes
+```
+
+Example: for a file named `movie.mkv`, create `movie.mkv.conf`:
+
+```ini
+# movie.mkv.conf
+sub-file=movie.en.srt
+alang=ja
+```
+
+With `--use-filedir-conf` enabled, mpv also looks for a `mpv.conf` in the same directory as the file for directory-level settings.
+
+## Legacy extension/protocol auto-profiles
+
+A simpler (soft-deprecated) mechanism automatically loads profiles based on the file extension or protocol:
+
+```ini
+[extension.mkv]
+profile-desc="Settings for MKV files"
+deband=yes
+
+[protocol.http]
+profile-desc="Settings for HTTP streams"
+cache=yes
+```
+
+Prefer conditional auto-profiles (`profile-cond`) for new configurations.
+
+## Including other config files
+
+Use `include` to split your configuration across multiple files:
+
+```ini
+# In mpv.conf
+include=/path/to/extra-settings.conf
+```

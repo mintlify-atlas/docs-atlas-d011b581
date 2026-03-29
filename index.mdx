@@ -1,97 +1,76 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "mpv — Command Line Media Player"
+description: "A free, open-source media player for the command line. Supports virtually every video and audio format, with powerful scripting, GPU rendering, and embedding APIs."
 ---
 
-## Setting up
+mpv is a free and open-source media player built for the command line. Powered by FFmpeg and libplacebo, it plays virtually any video or audio format with high-quality GPU-accelerated rendering. Extend it with Lua or JavaScript scripts, control it remotely via JSON IPC, or embed it in your own application using the libmpv C API.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install mpv on Linux, macOS, or Windows
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Play your first file and learn the essentials in minutes
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Configuration" icon="sliders" href="/usage/configuration">
+    Set up your config file and customize mpv to your workflow
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Scripting" icon="code" href="/scripting/lua-scripting">
+    Automate and extend mpv with Lua or JavaScript scripts
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What you can do with mpv
 
-Everything you need to create world-class documentation.
+<CardGroup cols={2}>
+  <Card title="Basic Playback" icon="play" href="/usage/basic-playback">
+    Play local files, URLs, streams, and playlists from the terminal
+  </Card>
+  <Card title="Keyboard Controls" icon="keyboard" href="/usage/keyboard-controls">
+    Master the default key bindings and create your own
+  </Card>
+  <Card title="Video Output" icon="display" href="/av/video-output">
+    Configure GPU-accelerated video drivers and rendering options
+  </Card>
+  <Card title="Audio Output" icon="volume-high" href="/av/audio-output">
+    Select and tune audio drivers for your platform
+  </Card>
+  <Card title="Hardware Decoding" icon="microchip" href="/av/hardware-decoding">
+    Enable VDPAU, VAAPI, NVDEC, and other hardware decode paths
+  </Card>
+  <Card title="IPC Protocol" icon="plug" href="/scripting/ipc-protocol">
+    Control mpv externally via the JSON IPC socket interface
+  </Card>
+  <Card title="libmpv Embedding" icon="puzzle-piece" href="/embedding/libmpv">
+    Embed mpv as a playback backend in your own application
+  </Card>
+  <Card title="Options Reference" icon="list" href="/reference/options-overview">
+    Browse the full command-line options reference
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Get started quickly
 
-## Need inspiration?
-
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<Steps>
+  <Step title="Install mpv">
+    Download mpv for your platform from the [installation page](/installation). Packages are available for all major Linux distributions, macOS via Homebrew, and Windows.
+  </Step>
+  <Step title="Play a file">
+    Open a terminal and run:
+    ```bash
+    mpv video.mkv
+    ```
+    mpv will auto-detect the best video and audio output for your system.
+  </Step>
+  <Step title="Configure your setup">
+    Create `~/.config/mpv/mpv.conf` to persist your preferred settings:
+    ```ini
+    vo=gpu-next
+    hwdec=auto-safe
+    sub-auto=fuzzy
+    ```
+  </Step>
+  <Step title="Explore scripting and automation">
+    Drop a `.lua` or `.js` file into `~/.config/mpv/scripts/` to extend mpv with custom behavior, key bindings, and integrations.
+  </Step>
+</Steps>

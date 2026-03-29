@@ -1,0 +1,235 @@
+---
+title: "Video Filters"
+description: "Apply video filters for deinterlacing, scaling, post-processing, and more"
+---
+
+Video filters let you modify the video stream before it reaches the video output. Filters are chained together, with each filter's output feeding into the next.
+
+```bash
+mpv --vf=<filter1[=param1:param2],filter2,...> video.mkv
+```
+
+<Tip>Run `mpv --vf=help` to list all available built-in video filters. Most filters are available via the `lavfi` wrapper, which exposes all of libavfilter.</Tip>
+
+<Note>`--vf` takes a single video track as input. Filters requiring multiple inputs cannot be used with `--vf`. Use `--lavfi-complex` for multi-input filter graphs.</Note>
+
+## Filter chain syntax
+
+The full syntax for a filter entry is:
+
+```
+["@"<label>":"] ["!"] <filter-name> ["=" <parameter-list>]
+```
+
+Parameters are separated by `:` (not `,`, which starts a new filter).
+
+```bash
+# Single filter
+mpv --vf=yadif video.mkv
+
+# Filter with parameters
+mpv --vf=yadif=mode=1:parity=auto video.mkv
+
+# Filter chain: deinterlace then apply subtitles
+mpv --vf=yadif,sub video.mkv
+
+# lavfi filter (libavfilter)
+mpv --vf='lavfi=[gradfun=20:30,vflip]' video.mkv
+```
+
+## Labels and runtime toggling
+
+Labels let you identify and control individual filters at runtime.
+
+```bash
+# Add a labeled filter (initially disabled with !)
+mpv --vf=@deint:!yadif video.mkv
+```
+
+Toggle a filter at runtime using the `vf` command in the mpv console or via input bindings:
+
+```bash
+# In input.conf — bind 'd' to toggle the deinterlace filter
+d vf toggle @deint
+```
+
+The `!` prefix marks a filter as disabled by default. It is created but skipped, ready to be enabled at runtime.
+
+## Managing the filter list
+
+| Option | Description |
+|---|---|
+| `--vf-append=filter` | Append a filter to the end of the chain |
+| `--vf-add=filter` | Append a filter (deprecated for multiple filters) |
+| `--vf-pre=filter` | Prepend a filter to the beginning of the chain |
+| `--vf-remove=filter` | Remove a filter by name/args or by `@label` |
+| `--vf-toggle=filter` | Add if absent, remove if present |
+| `--vf-clr` | Clear the entire filter chain |
+
+## lavfi — libavfilter wrapper
+
+`lavfi` is the primary filter for most video processing tasks. It wraps FFmpeg's libavfilter, giving you access to hundreds of filters.
+
+```bash
+mpv --vf=lavfi=<graph> video.mkv
+```
+
+The graph string uses the same syntax as the `ffmpeg` command line. Quote it with `[` and `]` to prevent parsing conflicts with mpv's own syntax:
+
+```bash
+# Apply a gradient debanding filter followed by vertical flip
+mpv --vf='lavfi=[gradfun=20:30,vflip]' video.mkv
+
+# Force a specific threading configuration
+mpv --vf='lavfi=yadif:o="threads=2,thread_type=slice"' video.mkv
+
+# Use named parameters
+mpv --vf='lavfi=graph="gradfun=radius=30:strength=20,vflip"' video.mkv
+```
+
+You can also use the `lavfi-` prefix to force the libavfilter bridge for any filter name:
+
+```bash
+# Force libavfilter's scale filter (not the deprecated mpv builtin)
+mpv --vf=lavfi-scale=1280:720 video.mkv
+```
+
+<Note>
+  If a filter name is not a built-in mpv filter, the `lavfi-bridge` is tried automatically. The bridge does not verify parameters before use and does not support help output.
+</Note>
+
+## Built-in filters
+
+### format
+
+Applies video parameter overrides (pixel format, color matrix, color levels, etc.) with optional conversion.
+
+```bash
+# Override colormatrix tag without conversion (for mislabeled files)
+mpv --vf=format:colormatrix=bt.709 video.mkv
+
+# True colorspace conversion using zimg
+mpv --vf=format:colormatrix=bt.2020-ncl:convert=yes --sws-allow-zimg video.mkv
+
+# Convert to a specific pixel format
+mpv --vf=format=fmt=rgb24 video.mkv
+```
+
+Key parameters:
+
+| Parameter | Description |
+|---|---|
+| `fmt` | Pixel format (e.g. `rgb24`, `420p`). Conversion is always performed. |
+| `colormatrix` | YUV-to-RGB color space: `auto`, `bt.601`, `bt.709`, `bt.2020-ncl`, `bt.2020-cl`, `bt.2100-pq`, `bt.2100-hlg`, `dolbyvision`, `smpte-240m` |
+| `colorlevels` | Color range: `auto`, `limited`, `full` |
+| `primaries` | RGB primaries: `auto`, `bt.601-525`, `bt.601-625`, `bt.709`, `bt.2020`, `dci-p3`, and more |
+| `convert=yes\|no` | If `yes`, use libswscale or zimg for actual conversion (default: no) |
+| `rotate` | Set rotation in degrees. `-1` uses the input format. |
+
+### sub
+
+Moves subtitle rendering to an arbitrary point in the filter chain, or forces subtitle rendering into the video stream instead of the video output's OSD layer.
+
+```bash
+# Render subtitles before the eq (equalizer) filter
+mpv --vf=sub,eq video.mkv
+```
+
+Parameters:
+- `bottom-margin` — Adds a black band at the bottom for subtitle placement
+- `top-margin` — Adds a black band at the top for toptitles
+
+### vapoursynth
+
+Loads a VapourSynth filter script for streamed processing. Requires expert knowledge; use `vspipe` + a pipe for random-access processing instead.
+
+```bash
+mpv --vf=vapoursynth=script.vpy video.mkv
+```
+
+<Warning>Do not use this filter unless you have expert knowledge in VapourSynth and know how to fix bugs in the mpv VapourSynth wrapper.</Warning>
+
+## Common use cases
+
+<AccordionGroup>
+  <Accordion title="Deinterlacing">
+    Use libavfilter's `yadif` (Yet Another DeInterlacing Filter) via lavfi:
+
+    ```bash
+    mpv --vf=lavfi=yadif video.mkv
+
+    # With mode parameter: 0=send frame, 1=send field, 2=send frame+nospatial, 3=send field+nospatial
+    mpv --vf=lavfi=yadif=mode=1 video.mkv
+    ```
+
+    For runtime toggling:
+
+    ```bash
+    mpv --vf=@deint:!lavfi=yadif video.mkv
+    # Then in input.conf:
+    # d  vf toggle @deint
+    ```
+  </Accordion>
+  <Accordion title="Scaling to a specific resolution">
+    ```bash
+    # Scale to 1280x720 using libavfilter
+    mpv --vf=lavfi=scale=1280:720 video.mkv
+
+    # Force libavfilter's scale (not the deprecated mpv builtin)
+    mpv --vf=lavfi-scale=1280:720 video.mkv
+    ```
+  </Accordion>
+  <Accordion title="Applying subtitles in the filter chain">
+    Move subtitle rendering before other filters, so subtitles are affected by color adjustments:
+
+    ```bash
+    mpv --vf=sub,eq video.mkv
+    ```
+  </Accordion>
+  <Accordion title="HDR tonemapping and format conversion">
+    Use the `format` filter to adjust color metadata for incorrectly tagged content:
+
+    ```bash
+    # Override incorrect HDR tag without conversion
+    mpv --vf=format:transfer=bt.1886 video.mkv
+
+    # Set PQ transfer function with zimg conversion
+    mpv --vf=format:transfer=pq:convert=yes --sws-allow-zimg video.mkv
+    ```
+
+    For HDR tonemapping in the renderer, prefer `--vo=gpu-next` with `--target-colorspace-hint`.
+  </Accordion>
+  <Accordion title="Flip and rotate">
+    ```bash
+    # Vertical flip
+    mpv --vf=lavfi=vflip video.mkv
+
+    # Horizontal flip
+    mpv --vf=lavfi=hflip video.mkv
+
+    # Rotate 90 degrees clockwise
+    mpv --vf=lavfi=transpose=1 video.mkv
+    ```
+  </Accordion>
+  <Accordion title="Chaining multiple filters">
+    ```bash
+    # Deinterlace, then scale to 720p
+    mpv --vf='lavfi=[yadif,scale=1280:720]' video.mkv
+
+    # Deinterlace then move subtitle rendering
+    mpv --vf=lavfi=yadif,sub video.mkv
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Filter help
+
+```bash
+# List all available video filters
+mpv --vf=help
+
+# Show parameters for a specific filter
+mpv --vf=format=help
+```
+
+For libavfilter filters, refer to the [FFmpeg filter documentation](https://ffmpeg.org/ffmpeg-filters.html).

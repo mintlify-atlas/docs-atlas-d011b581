@@ -1,0 +1,334 @@
+---
+title: "On-Screen Controller"
+description: "mpv's built-in mouse-controlled GUI overlay — layout, controls, and configuration"
+---
+
+The On-Screen Controller (OSC) is a minimal built-in GUI integrated into mpv that provides mouse-controllable playback controls. It is designed to make mpv accessible to new users and to enable precise direct seeking with a mouse.
+
+<Note>
+The OSC requires Lua support at compile time. It is enabled by default in all official mpv builds.
+</Note>
+
+## Enabling and disabling
+
+```bash
+mpv --osc=yes file.mkv    # enabled (default)
+mpv --osc=no file.mkv     # disabled
+```
+
+You can also disable it in your config file:
+
+```ini
+# ~/.config/mpv/mpv.conf
+osc=no
+```
+
+## How the OSC appears
+
+By default, the OSC appears whenever you move the mouse inside the player window and hides after 0.5 seconds of mouse inactivity, or when the mouse leaves the window. Press `del` to cycle between auto (mouse-triggered), always visible, and never visible.
+
+## Interface layout
+
+```
++------+---------+---------+-----------------------------------------------+
+| menu | pl prev | pl next | title                                   cache |
++------+------+------+---------+-----------+------+-------+-----+-----+----+
+| play | skip | skip | time    |  seekbar  | time | audio | sub | vol | fs |
+|      | back | frwd | elapsed |           | left |       |     |     |    |
++------+------+------+---------+-----------+------+-------+-----+-----+----+
+```
+
+### Control reference
+
+<AccordionGroup>
+  <Accordion title="menu">
+    | Action | Result |
+    |--------|--------|
+    | Left-click | Open the context menu |
+  </Accordion>
+  <Accordion title="pl prev / pl next">
+    | Action | Result |
+    |--------|--------|
+    | Left-click | Play previous / next file in playlist |
+    | Shift+left-click | Show the playlist |
+    | Middle-click | Show the playlist |
+    | Right-click | Open the playlist menu |
+  </Accordion>
+  <Accordion title="title">
+    Displays the current playlist position and media title, filename, or custom title. While hovering the seekbar, shows the target chapter name instead.
+
+    | Action | Result |
+    |--------|--------|
+    | Left-click | Show file and track info |
+    | Shift+left-click | Show the file path |
+    | Middle-click | Show the file path |
+    | Right-click | Open the history menu |
+  </Accordion>
+  <Accordion title="cache">
+    Shows the current cache fill status.
+  </Accordion>
+  <Accordion title="play (play/pause button)">
+    | Action | Result |
+    |--------|--------|
+    | Left-click | Toggle play/pause |
+    | Shift+left-click | Toggle infinite playlist looping |
+    | Middle-click | Toggle infinite playlist looping |
+    | Right-click | Toggle infinite looping of the current file |
+  </Accordion>
+  <Accordion title="skip back / skip frwd">
+    | Action | Result |
+    |--------|--------|
+    | Left-click (skip back) | Go to start of current chapter / previous chapter |
+    | Left-click (skip frwd) | Go to next chapter |
+    | Shift+left-click | Show chapter list |
+    | Middle-click | Show chapter list |
+    | Right-click | Open the chapter menu |
+  </Accordion>
+  <Accordion title="time elapsed / time left">
+    | Action | Result |
+    |--------|--------|
+    | Left-click (time elapsed) | Toggle millisecond display |
+    | Left-click (time left) | Toggle between total and remaining time |
+  </Accordion>
+  <Accordion title="seekbar">
+    Indicates current playback position and shows chapter markers.
+
+    | Action | Result |
+    |--------|--------|
+    | Left-click | Seek to clicked position |
+    | Right-click | Seek to nearest chapter |
+    | Mouse wheel | Seek forward / backward |
+  </Accordion>
+  <Accordion title="audio / sub track selectors">
+    Shows the selected track and the total number of available tracks.
+
+    | Action | Result |
+    |--------|--------|
+    | Left-click | Cycle tracks forward |
+    | Shift+left-click | Cycle tracks backward |
+    | Middle-click | Cycle tracks backward |
+    | Right-click | Open the track selection menu |
+    | Mouse wheel | Cycle tracks forward / backward |
+  </Accordion>
+  <Accordion title="vol (volume)">
+    | Action | Result |
+    |--------|--------|
+    | Left-click | Toggle mute |
+    | Right-click | Open audio device menu |
+    | Mouse wheel | Volume up / down |
+  </Accordion>
+  <Accordion title="fs (fullscreen)">
+    | Action | Result |
+    |--------|--------|
+    | Left-click | Toggle fullscreen |
+    | Right-click | Toggle window maximized state |
+  </Accordion>
+</AccordionGroup>
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `del` | Cycle OSC visibility: auto (mouse) → always → never |
+
+## Configuration
+
+The OSC is configured through a config file or via `--script-opts` on the command line.
+
+**Config file:** `~/.config/mpv/script-opts/osc.conf`
+
+**Command line:**
+```bash
+mpv --script-opts=osc-layout=bottombar,osc-seekbarstyle=knob file.mkv
+```
+
+All option names must be prefixed with `osc-` on the command line.
+
+### Layout options
+
+<ParamField path="layout" type="string" default="bottombar">
+  The overall OSC layout. Available layouts:
+
+  - `bottombar` — horizontal bar at the bottom (default)
+  - `topbar` — horizontal bar at the top
+  - `slimbottombar` — thinner version of bottombar
+  - `slimtopbar` — thinner version of topbar
+  - `box` — compact floating box
+  - `slimbox` — slimmer floating box
+  - `floating` — compact floating window controls
+
+  ```ini
+  # script-opts/osc.conf
+  layout=topbar
+  ```
+</ParamField>
+
+<ParamField path="seekbarstyle" type="bar|diamond|knob" default="bar">
+  Style of the playback position marker on the seekbar.
+</ParamField>
+
+<ParamField path="seekbarhandlesize" type="float" default="0.6">
+  Size of the seek handle when `seekbarstyle` is `diamond` or `knob`. Relative to the full seekbar height.
+</ParamField>
+
+<ParamField path="seekbarkeyframes" type="yes|no" default="yes">
+  Use keyframe-based seeking when dragging the seekbar. Set to `no` for exact seeking on drag (may be slower).
+</ParamField>
+
+<ParamField path="seekrangestyle" type="inverted|bar|line|slider|none" default="inverted">
+  Display style for seekable (cached) ranges on the seekbar.
+</ParamField>
+
+### Visibility and scaling
+
+<ParamField path="visibility" type="auto|never|always" default="auto">
+  Controls when the OSC is visible:
+  - `auto` — show on mouse movement, hide after inactivity
+  - `always` — always visible
+  - `never` — always hidden
+</ParamField>
+
+<ParamField path="scalewindowed" type="float" default="1.0">
+  Scale factor for the OSC when the player is in windowed mode.
+</ParamField>
+
+<ParamField path="scalefullscreen" type="float" default="1.0">
+  Scale factor for the OSC when the player is in fullscreen mode.
+</ParamField>
+
+<ParamField path="vidscale" type="auto|yes|no" default="auto">
+  Whether to scale the OSC with the video:
+  - `auto` — scale with OSD (respects `--osd-scale-by-window`)
+  - `no` — keep OSC size constant as the window resizes
+</ParamField>
+
+<ParamField path="showwindowed" type="yes|no" default="yes">
+  Show the OSC in windowed mode.
+</ParamField>
+
+<ParamField path="showfullscreen" type="yes|no" default="yes">
+  Show the OSC in fullscreen mode.
+</ParamField>
+
+### Timing and appearance
+
+<ParamField path="hidetimeout" type="integer (ms)" default="500">
+  Milliseconds of mouse inactivity before the OSC hides. Must not be negative.
+</ParamField>
+
+<ParamField path="fadeduration" type="integer (ms)" default="200">
+  Duration of the fade-in and fade-out animations. Set to `0` to disable fading.
+</ParamField>
+
+<ParamField path="timems" type="yes|no" default="no">
+  Display timecodes with millisecond precision.
+</ParamField>
+
+<ParamField path="timetotal" type="yes|no" default="no">
+  Show total duration instead of time remaining in the right timecode display.
+</ParamField>
+
+<ParamField path="title" type="string">
+  Template string for the OSC title. Supports property expansion. Default: `${!playlist-count==1:[${playlist-pos-1}/${playlist-count}] }${media-title}`
+</ParamField>
+
+<ParamField path="boxalpha" type="integer (0–255)" default="80">
+  Background box transparency for `box` and `slimbox` layouts. `0` is opaque, `255` is fully transparent.
+</ParamField>
+
+<ParamField path="deadzonesize" type="float (0.0–1.0)" default="0.75">
+  Size of the deadzone — an area where mouse movement does not trigger the OSC. The deadzone spans this fraction of the window, starting from the edge opposite the OSC. `0` means the OSC appears anywhere in the window; `1` means only hovering the OSC itself shows it.
+</ParamField>
+
+### Colors
+
+All color values use `#RRGGBB` format.
+
+<ParamField path="background_color" type="color" default="#000000">
+  Background color of the OSC.
+</ParamField>
+
+<ParamField path="timecode_color" type="color" default="#FFFFFF">
+  Color of timecodes and the seekbar.
+</ParamField>
+
+<ParamField path="title_color" type="color" default="#FFFFFF">
+  Color of the title text.
+</ParamField>
+
+<ParamField path="buttons_color" type="color" default="#FFFFFF">
+  Color of the main playback buttons.
+</ParamField>
+
+### Window controls
+
+<ParamField path="windowcontrols" type="auto|left|right|no" default="auto">
+  Whether to show window management controls (minimize, maximize, quit) over the video. Useful when the window has no system title bar.
+
+  `auto` shows controls when there is no system title bar.
+</ParamField>
+
+<ParamField path="windowcontrols_alignment" type="left|right" default="right">
+  Which side to place window controls on.
+</ParamField>
+
+### Custom buttons
+
+You can add up to several custom buttons in `bottombar` and `topbar` layouts. Each button is configured with a set of `custom_button_N_*` options:
+
+```ini
+# script-opts/osc.conf
+
+custom_button_1_content=🔁
+custom_button_1_mbtn_left_command=cycle-values loop-file inf no
+custom_button_1_mbtn_right_command=cycle-values loop-playlist inf no
+
+custom_button_2_content=🔀
+custom_button_2_mbtn_left_command=playlist-shuffle
+
+custom_button_3_content=⏱
+custom_button_3_mbtn_left_command=add speed 1
+custom_button_3_mbtn_right_command=set speed 1
+custom_button_3_wheel_up_command=add speed 0.25
+custom_button_3_wheel_down_command=add speed -0.25
+```
+
+## Script commands
+
+Other scripts and `input.conf` bindings can send commands to the OSC:
+
+| Command | Effect |
+|---------|--------|
+| `osc-visibility never` | Hide the OSC |
+| `osc-visibility auto` | Set to mouse-triggered mode |
+| `osc-visibility always` | Always show the OSC |
+| `osc-visibility cycle` | Cycle through visibility modes |
+| `osc-show` | Trigger the OSC to appear (as if the mouse moved) |
+| `osc-hide` | Hide the OSC (when in `auto` mode) |
+| `osc-idlescreen yes/no/cycle` | Control the mpv logo idle screen |
+
+**Example `input.conf`:**
+```
+a script-message osc-visibility never
+b script-message osc-visibility auto
+```
+
+## Example configuration
+
+```ini
+# ~/.config/mpv/script-opts/osc.conf
+
+layout=bottombar
+seekbarstyle=knob
+timems=no
+timetotal=no
+scalewindowed=1.2
+scalefullscreen=1.0
+vidscale=auto
+hidetimeout=1000
+fadeduration=150
+visibility=auto
+boxalpha=100
+background_color=#111111
+title_color=#FFFFFF
+```

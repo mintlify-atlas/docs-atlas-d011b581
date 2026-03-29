@@ -1,0 +1,252 @@
+---
+title: "Options overview"
+description: "How mpv's command-line options work — syntax, types, list options, and profiles"
+---
+
+mpv accepts options on the command line, in configuration files, and at runtime through the scripting and IPC APIs. This page explains the general option system before diving into specific option groups.
+
+## Command-line syntax
+
+Arguments starting with `-` are interpreted as options; everything else is treated as a filename or URL.
+
+```bash
+mpv [options] [file|URL|-]
+```
+
+Most options require a value:
+
+```bash
+mpv --option=value file.mkv
+```
+
+<Note>
+The canonical form is `--option=value` (double dash, equals sign). The legacy forms `-option value` and `-option=value` are accepted for compatibility but should be avoided.
+</Note>
+
+### Flag options
+
+Flag (boolean) options have a `--no-` counterpart and do not require a value:
+
+```bash
+mpv --fullscreen file.mkv       # enable fullscreen
+mpv --no-fullscreen file.mkv    # disable fullscreen
+mpv --fs=yes file.mkv           # same as --fullscreen
+mpv --fs=no file.mkv            # same as --no-fullscreen
+```
+
+### Getting help for an option
+
+```bash
+mpv --option=help    # list valid values for choice options
+mpv --list-options   # list all available options with types and defaults
+```
+
+## Option types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `flag` | Boolean yes/no | `--fullscreen`, `--no-audio` |
+| `string` | Arbitrary text | `--title="My Window"` |
+| `integer` | Whole number | `--osd-level=2` |
+| `float` | Decimal number | `--speed=1.5` |
+| `choice` | One of a fixed set of strings | `--hr-seek=yes` |
+| `color` | `r/g/b` or `#RRGGBB` | `--osd-color='#FFFFFF'` |
+| `geometry` | Window placement string | `--geometry=1280x720` |
+| `bytesize` | Size with unit suffix | `--demuxer-max-bytes=512MiB` |
+| `time` | `[[hh:]mm:]ss[.ms]` | `--start=01:30:00` |
+| `object list` | Complex filter chains | `--vf=scale=1920:1080` |
+
+## List options
+
+Several options accept comma-separated lists. These support action suffixes to modify lists incrementally rather than replacing them entirely.
+
+### String list and path list options
+
+```bash
+# Set the whole list
+mpv --display-tags=Title,Artist,Album file.flac
+
+# Append a single item (no escaping needed)
+mpv --display-tags-append=Comment file.flac
+
+# Prepend items
+mpv --sub-files-pre=/path/to/subs.srt file.mkv
+
+# Remove an item
+mpv --display-tags-remove=Comment file.flac
+
+# Clear the list
+mpv --display-tags-clr file.flac
+```
+
+<AccordionGroup>
+  <Accordion title="String list suffixes">
+    | Suffix | Effect |
+    |--------|--------|
+    | `-set` | Replace the entire list |
+    | `-append` | Append one item (no escape interpretation) |
+    | `-add` | Append one or more items |
+    | `-pre` | Prepend one or more items |
+    | `-clr` | Clear the list |
+    | `-del` | Delete matching items |
+    | `-remove` | Delete one item (no escape interpretation) |
+    | `-toggle` | Append, or remove if already present |
+  </Accordion>
+  <Accordion title="Key/value list suffixes">
+    Some options store key/value pairs (like `--script-opts`). Keys are unique — setting an existing key overwrites it.
+
+    | Suffix | Effect |
+    |--------|--------|
+    | `-set` | Replace the entire map |
+    | `-append` | Append one key=value pair |
+    | `-add` | Append one or more pairs |
+    | `-clr` | Clear the map |
+    | `-del` | Delete by key |
+    | `-remove` | Delete one key (no escape interpretation) |
+  </Accordion>
+</AccordionGroup>
+
+### Example: building a sub-file list incrementally
+
+```bash
+mpv --sub-files-append=/path/to/en.srt --sub-files-append=/path/to/commentary.srt file.mkv
+```
+
+## Configuration files
+
+You can store options in `~/.config/mpv/mpv.conf`. The syntax mirrors the command line but without leading `--`:
+
+```ini
+# ~/.config/mpv/mpv.conf
+
+# Don't allow new windows larger than the screen
+autofit-larger=100%x100%
+
+# Hardware decoding when available
+hwdec=auto
+
+# OSD message on playback start
+osd-playing-msg=File: ${filename}
+
+# Default subtitle language
+slang=en,eng
+```
+
+Options that are flags can use `yes` explicitly or just the bare name (which implies `yes`):
+
+```ini
+fullscreen=yes
+# same as:
+fullscreen
+```
+
+## Profiles
+
+Profiles group multiple options under a name so they can be applied together.
+
+```ini
+# ~/.config/mpv/mpv.conf
+
+# top-level options (always active)
+vo=gpu
+
+[big-cache]
+cache=yes
+demuxer-max-bytes=512MiB
+demuxer-readahead-secs=20
+
+[network]
+profile-desc="profile for network playback"
+force-window=immediate
+profile=big-cache
+```
+
+Apply a profile on the command line:
+
+```bash
+mpv --profile=network https://example.com/stream.m3u8
+```
+
+List defined profiles:
+
+```bash
+mpv --profile=help
+```
+
+Inspect a specific profile:
+
+```bash
+mpv --show-profile=network
+```
+
+### Built-in profiles
+
+mpv ships several built-in profiles you can apply directly:
+
+<CardGroup cols={3}>
+  <Card title="fast" icon="bolt">
+    Uses lower-quality but faster scalers. Sets `scale=bilinear`, `dscale=bilinear`, and disables some processing steps.
+  </Card>
+  <Card title="high-quality" icon="sparkles">
+    Enables the `ewa_lanczossharp` scaler and other quality-enhancing settings at the cost of more GPU usage.
+  </Card>
+  <Card title="sw-fast" icon="microchip">
+    Optimizes for software rendering performance, disabling GPU-intensive features.
+  </Card>
+</CardGroup>
+
+```bash
+mpv --profile=high-quality file.mkv
+mpv --profile=fast file.mkv
+```
+
+### Conditional auto profiles
+
+Profiles with `profile-cond` are applied automatically when a Lua expression evaluates to true:
+
+```ini
+[hd-video]
+profile-desc=Apply settings for HD video
+profile-cond=width >= 1280
+deband=yes
+
+[youtube-brighter]
+profile-cond=path:find('youtu%.?be')
+gamma=20
+
+[fullscreen-rotate]
+profile-cond=fullscreen
+profile-restore=copy
+vf-add=rotate=PI/2
+```
+
+<Note>
+Conditions are re-evaluated whenever a referenced property changes. Avoid using frequently-changing properties like `playback-time` in conditions, as this re-evaluates on every frame.
+</Note>
+
+## Options vs. properties
+
+Options and properties are related but distinct:
+
+- **Options** are set on the command line or in config files. They define the *initial* state.
+- **Properties** are the *runtime* state of the player, readable and writable via input commands, scripts, and IPC.
+
+Most options have a corresponding property of the same name. You can change a property at runtime:
+
+```
+# In the mpv console (` key) or input.conf:
+set speed 2.0
+cycle pause
+add volume 5
+```
+
+Outside of playback, reading a property returns the option value. During playback, it returns the effective runtime value (which may differ from the option if mpv chose a different default).
+
+## Getting help
+
+```bash
+mpv --list-options          # all options, types, and defaults
+mpv --list-properties       # all runtime properties
+mpv --h=osd                 # options containing "osd" in their name
+mpv --show-profile=fast     # contents of the "fast" built-in profile
+```

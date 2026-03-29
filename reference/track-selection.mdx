@@ -1,0 +1,197 @@
+---
+title: "Track selection"
+description: "Select audio, video, and subtitle tracks by language, ID, or default rules"
+---
+
+mpv can play files with multiple audio, video, and subtitle tracks. These options let you specify which tracks to use — by language preference, numeric ID, or automatic rules.
+
+<Note>
+Track selection behavior has evolved across mpv releases. Since 0.33.0, selecting a track by number strictly selects that track; if it doesn't exist, the option resets to `auto` rather than falling back to defaults.
+</Note>
+
+## Language preferences
+
+Use IETF language tags (e.g. `en`, `eng`, `pt-BR`, `jpn`) to express a prioritized list. mpv selects the first match; a track matching more subtags wins over one matching fewer.
+
+<ParamField path="--alang" type="string list">
+  Prioritized list of audio languages. Equivalent ISO 639-1 (two-letter) and ISO 639-2 (three-letter) codes are treated the same.
+
+  ```bash
+  mpv dvd://1 --alang=hu,en           # Hungarian audio, fall back to English
+  mpv --alang=jpn example.mkv         # Japanese audio track
+  ```
+
+  This is a string list option — use `--alang-append` to add languages without replacing the list.
+</ParamField>
+
+<ParamField path="--slang" type="string list">
+  Prioritized list of subtitle languages. Same matching logic as `--alang`.
+
+  ```bash
+  mpv dvd://1 --slang=hu,en           # Hungarian subs, fall back to English
+  mpv --slang=pt-BR example.mkv       # Brazilian Portuguese; falls back to any Portuguese
+  mpv --slang=jpn example.mkv         # Japanese subtitles
+  ```
+</ParamField>
+
+<ParamField path="--vlang" type="string list">
+  Prioritized list of video track languages. Same as `--alang` and `--slang` but for video tracks.
+</ParamField>
+
+## Track ID selection
+
+<ParamField path="--aid" type="ID|auto|no" default="auto">
+  Select the audio track by numeric ID. `auto` selects the default track; `no` disables audio.
+
+  `--audio` is an alias for `--aid`.
+
+  ```bash
+  mpv --aid=2 file.mkv    # select audio track 2
+  mpv --aid=no file.mkv   # disable audio (same as --audio=no)
+  mpv --aid=auto file.mkv # use default selection (same as omitting the option)
+  ```
+</ParamField>
+
+<ParamField path="--sid" type="ID|auto|no" default="auto">
+  Select the subtitle track by numeric ID. `auto` selects the default; `no` disables subtitles.
+
+  `--sub` is an alias for `--sid`.
+
+  ```bash
+  mpv --sid=1 file.mkv    # select subtitle track 1
+  mpv --sid=no file.mkv   # disable subtitles
+  ```
+</ParamField>
+
+<ParamField path="--vid" type="ID|auto|no" default="auto">
+  Select the video track by numeric ID. `auto` selects the default; `no` disables video.
+
+  `--video` is an alias for `--vid`.
+
+  ```bash
+  mpv --vid=no file.mkv   # audio-only playback
+  ```
+
+  <Note>
+  When video is disabled while streaming with yt-dlp/youtube-dl, mpv sets the format to `bestaudio/best` to save bandwidth.
+  </Note>
+</ParamField>
+
+## Subtitle auto-selection rules
+
+These options control how mpv picks subtitle tracks automatically when `--slang` is not set or produces no match.
+
+<ParamField path="--sub-forced-only" type="auto|yes|no" default="auto">
+  Controls whether forced-only subtitle tracks are preferred.
+
+  - `auto` — use forced tracks when the subtitle language matches the audio language
+  - `yes` — only show forced subtitle tracks
+  - `no` — treat forced and non-forced tracks equally
+</ParamField>
+
+<ParamField path="--subs-with-matching-audio" type="yes|forced|no" default="yes">
+  When autoselecting subtitles, whether to select a track whose language matches the audio track's language.
+
+  - `yes` — select a matching subtitle track even if it matches the audio language
+  - `no` — never autoselect subtitles matching the audio language
+  - `forced` — only autoselect forced subtitle tracks when audio and subtitle language match
+</ParamField>
+
+<ParamField path="--subs-match-os-language" type="yes|no" default="yes">
+  When no `--slang` is set, autoselect subtitles that match the OS language, if the audio stream is in a different language. Ignored when `--slang` is set.
+</ParamField>
+
+<ParamField path="--subs-fallback" type="yes|default|no" default="default">
+  When no subtitle track matches your preferred languages, whether to fall back to a full (non-forced) track in any language.
+
+  - `yes` — always fall back to any track
+  - `default` — only fall back to tracks flagged as default
+  - `no` — do not fall back; show no subtitles
+</ParamField>
+
+<ParamField path="--subs-fallback-forced" type="yes|no|always" default="yes">
+  Controls behavior of forced subtitle tracks in the fallback selection.
+
+  - `yes` — prefer forced tracks if language matches audio and preferred languages
+  - `always` — only use forced tracks, never fall back to regular tracks
+  - `no` — never select forced subtitle tracks automatically
+</ParamField>
+
+## Audio cover art display
+
+<ParamField path="--audio-display" type="no|embedded-first|external-first" default="embedded-first">
+  Whether to show cover art when playing audio files, and which source takes priority.
+
+  - `no` — disable video display entirely for audio-only files
+  - `embedded-first` — show embedded cover art before external image files
+  - `external-first` — prefer external cover art files (e.g. `cover.jpg` in the same directory)
+
+  This option has no effect when the file has a real video track.
+
+  ```bash
+  mpv --audio-display=no song.flac         # terminal-only audio playback
+  mpv --audio-display=external-first album.mp3
+  ```
+</ParamField>
+
+## Matroska edition selection
+
+<ParamField path="--edition" type="ID|auto" default="auto">
+  For Matroska files with multiple editions (chapter sets), select the edition by zero-based index. `auto` picks the edition flagged as default, or the first edition if none is flagged.
+
+  ```bash
+  mpv --edition=0 file.mkv   # first edition
+  mpv --edition=1 file.mkv   # second edition
+  ```
+</ParamField>
+
+## Auto-selection control
+
+<ParamField path="--track-auto-selection" type="yes|no" default="yes">
+  Enable or disable automatic track selection based on `--aid`, `--alang`, and similar options. When disabled, no tracks are selected and playback waits (similar to a paused state) rather than exiting if no tracks are selected.
+
+  Useful with `--lavfi-complex` for setting up filter graphs that select tracks at runtime.
+</ParamField>
+
+## Track properties vs. options
+
+Track selection options also exist as runtime properties. The property value during playback reflects the *effective* selection — not necessarily the option value:
+
+```bash
+# Outside playback: aid property returns "auto"
+# During playback of a file with 2 audio tracks: aid property may return "2"
+```
+
+To change the active track at runtime (via console or input.conf):
+
+```
+set aid 2        # switch to audio track 2
+cycle sub        # cycle through subtitle tracks
+```
+
+<Tip>
+Running `mpv --aid=2 file1.mkv file2.mkv` selects track 2 for file1; if file2 only has one audio track, the `aid` option resets to `auto` for that file (behavior since mpv 0.33.0).
+</Tip>
+
+## Common examples
+
+<CodeGroup>
+
+```bash DVD playback
+# Hungarian audio with English fallback, Hungarian subs
+mpv dvd://1 --alang=hu,en --slang=hu,en
+```
+
+```bash Anime with Japanese audio and English subs
+mpv --alang=jpn --slang=eng episode.mkv
+```
+
+```bash Audio-only, no cover art
+mpv --vid=no song.flac
+```
+
+```bash Force specific track IDs
+mpv --aid=3 --sid=2 movie.mkv
+```
+
+</CodeGroup>

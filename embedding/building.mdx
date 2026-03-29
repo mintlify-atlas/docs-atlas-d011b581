@@ -1,0 +1,302 @@
+---
+title: "Building from Source"
+description: "Compile mpv from source on Linux, macOS, and Windows"
+---
+
+mpv uses [Meson](https://mesonbuild.com/) as its build system. Autotools and CMake are not supported.
+
+## Prerequisites
+
+Install Meson from your distribution's package manager or via PyPI:
+
+```bash
+pip install meson
+```
+
+Meson requires Meson `>= 1.3.0` and a C11-capable compiler (GCC or Clang).
+
+## Essential dependencies
+
+The following libraries must be present before configuring the build:
+
+| Library | Purpose |
+|---|---|
+| `libavcodec >= 60.31.102` | Audio/video decoding |
+| `libavfilter >= 9.12.100` | Filter graph |
+| `libavformat >= 60.16.100` | Demuxing / container formats |
+| `libavutil >= 58.29.100` | FFmpeg utility functions |
+| `libswresample >= 4.12.100` | Audio resampling |
+| `libswscale >= 7.5.100` | Video scaling / pixel conversion |
+| `libplacebo >= 7.360.1` | GPU-accelerated video rendering |
+| `libass >= 0.12.2` | Subtitles and OSD rendering |
+| `zlib` | Compression |
+| `iconv` | Character set conversion (usually provided by libc) |
+
+**Optional dependencies:**
+
+| Library | Enables |
+|---|---|
+| Lua / LuaJIT | OSC (on-screen controller) and scripting |
+| libjpeg | JPEG screenshots |
+| uchardet | Automatic subtitle charset detection |
+| libva / nvdec | Hardware-accelerated decoding (Linux) |
+
+## Basic build
+
+<Steps>
+  <Step title="Configure">
+    Run `meson setup` to create a build directory and configure the project:
+
+    ```bash
+    meson setup build
+    ```
+
+    Meson detects available libraries automatically. Review detected features in the output.
+  </Step>
+  <Step title="Compile">
+    ```bash
+    meson compile -C build
+    ```
+  </Step>
+  <Step title="Install">
+    ```bash
+    meson install -C build
+    ```
+
+    The default install prefix is `/usr/local`. Override with `--prefix`:
+
+    ```bash
+    meson setup --prefix=/usr build
+    ```
+  </Step>
+</Steps>
+
+To see all available build options after configuring:
+
+```bash
+meson configure build
+```
+
+You can also inspect `meson_options.txt` in the source root directly. Build logs are written to `build/meson-logs/`.
+
+## libplacebo as a subproject
+
+If a sufficiently recent `libplacebo` is not available on your system, Meson can build it as a statically linked subproject:
+
+```bash
+mkdir -p subprojects
+git clone https://code.videolan.org/videolan/libplacebo.git \
+    --depth=1 --recursive subprojects/libplacebo
+```
+
+Run `meson setup build` afterwards — Meson will detect and build libplacebo automatically.
+
+## Notable build options
+
+| Option | Default | Effect |
+|---|---|---|
+| `-Dgpl=false` | `true` | Build in LGPL mode (disables some GPL-only features) |
+| `-Dlibmpv=false` | `true` | Disable building the shared `libmpv` library (enabled by default) |
+| `-Dcplayer=false` | `true` | Build only libmpv, skip the mpv CLI player binary |
+| `-Dlua=enabled` | `auto` | Force-enable Lua scripting (OSC requires this) |
+| `-Dlua=disabled` | `auto` | Force-disable Lua scripting |
+| `-Djavascript=enabled` | `auto` | Enable JavaScript scripting via MuJS |
+| `-Dlcms2=enabled` | `auto` | Enable ICC color management |
+| `-Dbuildtype=release` | `debugoptimized` | Optimized release build |
+
+```bash
+# LGPL-only build (for embedding in proprietary software)
+meson setup -Dgpl=false build
+
+# Library only, no CLI player
+meson setup -Dcplayer=false build
+```
+
+## Platform-specific instructions
+
+<Tabs>
+  <Tab title="Linux / BSD">
+    Install development packages for the required libraries using your package manager.
+
+    **Debian / Ubuntu:**
+    ```bash
+    apt install build-essential meson pkg-config \
+        libavcodec-dev libavfilter-dev libavformat-dev \
+        libavutil-dev libswresample-dev libswscale-dev \
+        libass-dev zlib1g-dev libjpeg-dev
+    ```
+
+    **Fedora:**
+    ```bash
+    dnf install gcc meson pkg-config \
+        ffmpeg-devel libass-devel zlib-devel libjpeg-turbo-devel
+    ```
+
+    Then build:
+    ```bash
+    meson setup build
+    meson compile -C build
+    ```
+
+    For X11 output support, also install:
+    ```bash
+    # Debian / Ubuntu
+    apt install libgl-dev libx11-dev libxrandr-dev libxext-dev \
+        libxss-dev libxpresent-dev libvdpau-dev
+    ```
+  </Tab>
+  <Tab title="macOS">
+    Install dependencies with [Homebrew](https://brew.sh/):
+
+    ```bash
+    brew install meson ffmpeg libass luajit jpeg-turbo
+    ```
+
+    For libplacebo, either install it from Homebrew or use the subproject approach:
+
+    ```bash
+    brew install libplacebo
+    ```
+
+    Then build:
+    ```bash
+    meson setup build
+    meson compile -C build
+    ```
+  </Tab>
+  <Tab title="Windows">
+    Windows compilation is supported through three toolchain approaches. All use Meson as the build system.
+
+    ### MSYS2 (recommended for Windows-native development)
+
+    <Steps>
+      <Step title="Install MSYS2">
+        Follow the installer at [msys2.org](https://www.msys2.org/). Open the **CLANG64** environment (not the default MSYS2 shell).
+      </Step>
+      <Step title="Install dependencies">
+        ```bash
+        pacman -S pactoys git
+        pacboy -S python pkgconf cc meson \
+            ffmpeg libjpeg-turbo libplacebo luajit vulkan-headers
+        ```
+      </Step>
+      <Step title="Build">
+        ```bash
+        meson setup build -Dlibmpv=true --prefix=$MSYSTEM_PREFIX
+        meson compile -C build
+        meson install -C build
+        ```
+      </Step>
+    </Steps>
+
+    ### Cross-compilation from Linux (MinGW-w64)
+
+    <Steps>
+      <Step title="Initialize Meson subprojects">
+        ```bash
+        meson wrap update-db
+        meson wrap install expat
+        meson wrap install harfbuzz
+        meson wrap install libpng
+        meson wrap install zlib
+
+        mkdir -p subprojects
+
+        cat <<'EOF' > subprojects/libplacebo.wrap
+        [wrap-git]
+        url = https://github.com/haasn/libplacebo
+        revision = master
+        depth = 1
+        clone-recursive = true
+        EOF
+
+        cat <<'EOF' > subprojects/libass.wrap
+        [wrap-git]
+        revision = master
+        url = https://github.com/libass/libass
+        depth = 1
+        EOF
+
+        cat <<'EOF' > subprojects/ffmpeg.wrap
+        [wrap-git]
+        url = https://gitlab.freedesktop.org/gstreamer/meson-ports/ffmpeg.git
+        revision = meson-8.0
+        depth = 1
+        [provide]
+        libavcodec = libavcodec_dep
+        libavdevice = libavdevice_dep
+        libavfilter = libavfilter_dep
+        libavformat = libavformat_dep
+        libavutil = libavutil_dep
+        libswresample = libswresample_dep
+        libswscale = libswscale_dep
+        EOF
+        ```
+      </Step>
+      <Step title="Configure with a cross-file">
+        Create `cross-file.txt` for your MinGW-w64 toolchain (see [Meson cross-compilation docs](https://mesonbuild.com/Cross-compilation.html)), then:
+
+        ```bash
+        meson setup -Ddefault_library=static -Dprefer_static=true \
+                    -Dc_link_args='-static' -Dcpp_link_args='-static' \
+                    --cross-file cross-file.txt build
+        ```
+      </Step>
+      <Step title="Compile">
+        ```bash
+        ninja -C build mpv.exe mpv.com
+        ```
+
+        This produces fully static, portable `mpv.exe` and `mpv.com` binaries.
+      </Step>
+    </Steps>
+
+    ### Building libmpv on Windows
+
+    To build the `libmpv` shared or static library:
+
+    ```bash
+    # Shared library (libmpv-2.dll)
+    meson configure build -Dlibmpv=true -Ddefault_library=shared
+    ninja -C build libmpv-2.dll
+
+    # Static library (libmpv.a)
+    meson configure build -Dlibmpv=true -Ddefault_library=static
+    ninja -C build libmpv.a
+    ```
+
+    ### Linking with MSVC
+
+    Building mpv with MSVC (`cl.exe`) directly is not supported. However, you can link against a MinGW-built `libmpv-2.dll` from a Visual Studio project. If the toolchain did not produce a `.lib` import library, generate one:
+
+    ```bash
+    lib /name:mpv-2.dll /out:mpv.lib /MACHINE:X64
+    ```
+
+    Ensure the `/name:` parameter exactly matches the DLL filename.
+  </Tab>
+</Tabs>
+
+## Using mpv-build
+
+[mpv-build](https://github.com/mpv-player/mpv-build) is a wrapper that compiles FFmpeg and libass from source and then statically links them into mpv. It is useful when you need specific FFmpeg versions or features not packaged by your distribution.
+
+```bash
+git clone https://github.com/mpv-player/mpv-build.git
+cd mpv-build
+./rebuild -j4
+```
+
+## LGPL mode
+
+By default, mpv is licensed GPLv2+. To build under LGPLv2.1+ (which removes some features and enables use in proprietary software), pass `-Dgpl=false`:
+
+```bash
+meson setup -Dgpl=false build
+```
+
+The client API header (`include/mpv/client.h`) is always ISC licensed, independent of the `-Dgpl` setting.
+
+<Tip>
+Run `mpv --version` after installation to confirm the build succeeded and check which features were compiled in.
+</Tip>

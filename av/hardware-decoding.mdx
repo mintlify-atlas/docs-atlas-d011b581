@@ -1,0 +1,257 @@
+---
+title: "Hardware Decoding"
+description: "Enable GPU-accelerated video decoding with VDPAU, VAAPI, NVDEC, VideoToolbox, and more"
+---
+
+Hardware decoding offloads video decode work from the CPU to dedicated GPU hardware. mpv does not enable it by default to keep out-of-the-box behavior as reliable as possible, but on modern hardware it usually works well and can reduce CPU usage significantly.
+
+```bash
+mpv --hwdec=auto video.mkv
+```
+
+<Note>
+  Hardware decoding is disabled by default (`--hwdec=no`). Enable it at runtime with the `Ctrl+h` shortcut, which toggles between `auto` and `no`.
+</Note>
+
+## Choosing a method
+
+<Steps>
+  <Step title="Try auto first">
+    Start with `--hwdec=auto`. This selects from a whitelist of known-safe hwdec methods that the mpv development team actively supports.
+
+    ```bash
+    mpv --hwdec=auto video.mkv
+    ```
+  </Step>
+  <Step title="Test all codecs">
+    To see exactly which hardware decoder is being used and for which codecs:
+
+    ```bash
+    mpv --hwdec=auto --hwdec-codecs=all -v video.mkv 2>&1 | grep hwdec
+    ```
+  </Step>
+  <Step title="Add to config if it works">
+    If hardware decoding works as desired for your content, add it to `~/.config/mpv/mpv.conf`:
+
+    ```ini
+    hwdec=auto
+    ```
+  </Step>
+</Steps>
+
+## --hwdec values
+
+```bash
+mpv --hwdec=<value> video.mkv
+```
+
+| Value | Description |
+|---|---|
+| `no` | Always use software decoding (default) |
+| `auto` | Enable any whitelisted hw decoder |
+| `auto-safe` | Alias for `auto` |
+| `yes` | Alias for `auto` |
+| `auto-unsafe` | Forcibly enable any hw decoder found (bypasses whitelist — for testing only) |
+| `auto-copy` | Like `auto`, but only copy-back modes (see below) |
+| `auto-copy-safe` | Alias for `auto-copy` |
+| `auto-copy-unsafe` | Like `auto-copy` but without the whitelist |
+
+You can also mix specific API names with special values:
+
+```bash
+# Try vaapi first, then fall through auto logic
+mpv --hwdec=vaapi,auto video.mkv
+```
+
+## Platform methods
+
+<Tabs>
+  <Tab title="Linux">
+    ### vaapi (Intel / AMD)
+
+    Requires `--vo=gpu`, `--vo=gpu-next`, `--vo=vaapi`, or `--vo=dmabuf-wayland`.
+
+    ```bash
+    mpv --hwdec=vaapi --vo=gpu video.mkv
+    ```
+
+    Works with Intel and AMD GPUs. Requires the OpenGL EGL backend if the GPU does not support DRM modifiers.
+
+    ### nvdec (NVIDIA — recommended)
+
+    Requires `--vo=gpu` or `--vo=gpu-next`. Available on any platform where CUDA is available.
+
+    ```bash
+    mpv --hwdec=nvdec --vo=gpu video.mkv
+    ```
+
+    `nvdec` is the newest and recommended method for NVIDIA GPU hardware decoding. Prefer it over `vdpau` and `cuda`.
+
+    ### vdpau (NVIDIA legacy — not recommended)
+
+    Requires `--vo=gpu` with `--gpu-context=x11`, or `--vo=vdpau`.
+
+    ```bash
+    mpv --hwdec=vdpau --vo=gpu video.mkv
+    ```
+
+    <Warning>
+      `vdpau` always forces RGB conversion in hardware and does not support newer colorspaces (BT.2020) or 10-bit/HDR content correctly. Use `--hwdec=nvdec` instead.
+    </Warning>
+
+    ### drm (SoC / embedded)
+
+    Requires `--vo=gpu` or `--vo=gpu-next` with the DRM backend.
+
+    ```bash
+    mpv --hwdec=drm --vo=gpu video.mkv
+    ```
+  </Tab>
+  <Tab title="macOS">
+    ### videotoolbox
+
+    Requires `--vo=gpu` or `--vo=gpu-next`.
+
+    ```bash
+    mpv --hwdec=videotoolbox --vo=gpu-next video.mkv
+    ```
+
+    VideoToolbox is the recommended hardware decoder on macOS. Supports H.264, HEVC, VP9, AV1 (Apple Silicon), and more depending on the hardware.
+
+    The copy variant (`videotoolbox-copy`) supports macOS 10.15+ or iOS 9.0+.
+  </Tab>
+  <Tab title="Windows">
+    ### d3d11va (recommended)
+
+    Requires `--vo=gpu` or `--vo=gpu-next` with `--gpu-context=d3d11` or `--gpu-context=angle`. Windows 8+ only.
+
+    ```bash
+    mpv --hwdec=d3d11va --vo=gpu video.mkv
+    ```
+
+    ### nvdec (NVIDIA)
+
+    Available on any platform where CUDA is available. See the Linux tab for details.
+
+    ```bash
+    mpv --hwdec=nvdec --vo=gpu video.mkv
+    ```
+
+    ### dxva2 (older hardware)
+
+    Requires `--vo=gpu` with `--gpu-context=d3d11`, `--gpu-context=angle`, or `--gpu-context=dxinterop`. Windows only.
+
+    ```bash
+    mpv --hwdec=dxva2 --vo=gpu video.mkv
+    ```
+
+    <Warning>
+      `dxva2` is not safe. It always uses BT.601 for RGB conversion regardless of the video's actual colorspace, causing incorrect colors on non-SD content. Use `d3d11va` instead.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Native vs. copy modes
+
+Every hardware decoding method comes in two variants:
+
+<CardGroup cols={2}>
+  <Card title="Native mode (e.g. vaapi)" icon="microchip">
+    Decoded frames stay in GPU memory and are passed directly to the video output. Lower overhead, but works only with compatible VOs and may limit which video filters you can apply.
+  </Card>
+  <Card title="Copy mode (e.g. vaapi-copy)" icon="copy">
+    Decoded frames are copied back to system RAM after decoding. Works with all video filters and all video outputs, at the cost of a copy operation.
+  </Card>
+</CardGroup>
+
+```bash
+# Native: frames stay on GPU (fastest, limited compatibility)
+mpv --hwdec=vaapi --vo=gpu video.mkv
+
+# Copy: frames copied back to RAM (compatible with all filters and VOs)
+mpv --hwdec=vaapi-copy video.mkv
+```
+
+Use `--hwdec=auto-copy` to automatically select the best available copy-back method:
+
+```bash
+mpv --hwdec=auto-copy video.mkv
+```
+
+## Hardware decoding + GPU rendering interop
+
+For the best result with native (non-copy) modes, pair `--hwdec` with `--vo=gpu` or `--vo=gpu-next`:
+
+```bash
+# NVIDIA on Linux: nvdec + gpu
+mpv --hwdec=nvdec --vo=gpu-next video.mkv
+
+# Intel/AMD on Linux: vaapi + gpu-next
+mpv --hwdec=vaapi --vo=gpu-next video.mkv
+
+# macOS: videotoolbox + gpu-next
+mpv --hwdec=videotoolbox --vo=gpu-next video.mkv
+
+# Windows: d3d11va + gpu with d3d11 context
+mpv --hwdec=d3d11va --vo=gpu --gpu-context=d3d11 video.mkv
+```
+
+## Restricting codecs
+
+By default, hardware decoding is whitelisted for: `h264`, `vc1`, `hevc`, `vp8`, `vp9`, `av1`, `prores`, `prores_raw`, `ffv1`, `dpx`.
+
+Use `--hwdec-codecs` to override this list:
+
+```bash
+# Only use hardware decoding for H.264 and HEVC
+mpv --hwdec=auto --hwdec-codecs=h264,hevc video.mkv
+
+# Enable for all codecs
+mpv --hwdec=auto --hwdec-codecs=all video.mkv
+
+# Restrict vdpau to H.264 and MPEG-2 only
+mpv --hwdec=vdpau --hwdec-codecs=h264,mpeg2video video.mkv
+```
+
+## When not to use hardware decoding
+
+<Warning>
+  Disable hardware decoding if you encounter any of the following:
+
+  - Corrupted frames, glitches, or visual artifacts
+  - Incorrect colors or discoloration
+  - Random crashes or freezes
+  - Incorrect playback of HDR content
+
+  The first thing to try when debugging playback issues is `--hwdec=no`.
+</Warning>
+
+Known limitations:
+
+- **vdpau**: Forces RGB conversion in hardware; BT.2020, 10-bit, and HDR are not supported correctly.
+- **dxva2**: Always uses BT.601 for RGB conversion; causes incorrect colors on HD/UHD content.
+- **cuda**: Reported to corrupt timestamps in some mixed streams, causing flashing frames. Prefer `nvdec`.
+- **mediacodec** (Android): Forces RGB conversion; 10-bit support is limited and reduces output to 8-bit.
+
+## Fallback behavior
+
+By default, mpv falls back to software decoding if the hardware decoder fails for 3 consecutive frames (`--hwdec-software-fallback=3`). You can adjust this:
+
+```bash
+# Fall back immediately on any failure
+mpv --hwdec=auto --hwdec-software-fallback=1 video.mkv
+
+# Disable fallback (stay in hwdec mode even if frames fail)
+mpv --hwdec=auto --hwdec-software-fallback=no video.mkv
+```
+
+## Additional options
+
+| Option | Description |
+|---|---|
+| `--hwdec-extra-frames=<N>` | Number of GPU frames to preallocate for hardware decoding. Increase if you see frame drops during decode. |
+| `--hwdec-threads=<N>` | Number of threads for hardware decoding (default: 4). Set to 0 for auto (number of CPU cores). |
+| `--hwdec-image-format=<name>` | Internal pixel format for hardware decoding (default: `no`, which uses the decoder's default). |
+| `--gpu-hwdec-interop=<auto\|all\|no\|name>` | Troubleshooting option to select or block specific hwdec interop backends. |
+| `--cuda-decode-device=<auto\|0..>` | Select which GPU to use for `cuda`/`nvdec` decoding. |
+| `--vaapi-device=<path>` | DRM device path for `vaapi-copy` (default: `/dev/dri/renderD128`). |

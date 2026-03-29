@@ -1,0 +1,245 @@
+---
+title: "Basic Playback"
+description: "Playing local files, URLs, streams, DVDs, and more"
+---
+
+## Synopsis
+
+```bash
+mpv [options] [file|URL|PLAYLIST|-]
+mpv [options] files
+```
+
+Command-line arguments starting with `-` are interpreted as options. Everything else is treated as a filename or URL. Options require a parameter in the form `--option=value`. Flag options use `--flag` (equivalent to `--flag=yes`) or `--no-flag` (equivalent to `--flag=no`).
+
+## Playing local files
+
+Pass one or more file paths directly to mpv:
+
+```bash
+mpv video.mkv
+mpv /path/to/movie.mp4
+mpv "filename with spaces.mkv"
+```
+
+To play multiple files sequentially, list them all on the command line. mpv adds them to an internal playlist and plays each in order:
+
+```bash
+mpv episode1.mkv episode2.mkv episode3.mkv
+```
+
+<Tip>
+  Prefix relative paths that begin with `-` using `./` to prevent mpv from
+  interpreting them as options. For example, use `./file.mkv` instead of
+  `-file.mkv`.
+</Tip>
+
+## Reading from stdin
+
+Use `-` as the filename to read media data from stdin:
+
+```bash
+mpv -
+```
+
+This also works with piped input:
+
+```bash
+cat file.mkv | mpv -
+ffmpeg -i input.mp4 -f matroska - | mpv -
+```
+
+<Note>
+  Using `-` as the filename disables console controls, which makes it suitable
+  for playing data piped to stdin.
+</Note>
+
+Use `--` to stop mpv from interpreting subsequent arguments as options — useful if you need to play a file that starts with a `-`:
+
+```bash
+mpv -- -oddly-named-file.mkv
+```
+
+## Playing URLs and streams
+
+mpv accepts HTTP and HTTPS URLs directly:
+
+```bash
+mpv https://example.com/video.mp4
+```
+
+For YouTube and other sites, mpv integrates with `yt-dlp` (or `youtube-dl`) automatically when you pass an `http(s)://` URL that points to a supported site:
+
+```bash
+mpv https://www.youtube.com/watch?v=dQw4w9WgXcQ
+```
+
+Force yt-dlp processing for any URL using the `ytdl://` prefix:
+
+```bash
+mpv ytdl://dQw4w9WgXcQ
+```
+
+## Special protocols
+
+<AccordionGroup>
+  <Accordion title="DVD — dvd://">
+    Play a DVD disc or ISO image. Without a title number, mpv auto-selects the longest title. DVD menus are not supported.
+
+    ```bash
+    mpv dvd://                        # play the longest title
+    mpv dvd://2                       # play title 2
+    mpv dvd:// --dvd-device=/dev/sr0  # specify the drive
+    mpv dvd:// --dvd-device=movie.iso # play from an ISO file
+    ```
+
+    `dvdnav://` is an alias for `dvd://`.
+  </Accordion>
+
+  <Accordion title="Blu-ray — bd://">
+    Play a Blu-ray disc or ISO image. Requires libbluray. Since libbluray 1.0.1, ISO files are supported via `--bluray-device`.
+
+    ```bash
+    mpv bd://                              # play the default playlist
+    mpv bd://longest                       # play the longest playlist
+    mpv bd://1                             # play playlist index 1
+    mpv bd:// --bluray-device=/dev/sr0
+    mpv bd:// --bluray-device=movie.iso
+    ```
+
+    `bluray://` is an alias for `bd://`.
+  </Accordion>
+
+  <Accordion title="CD audio — cdda://">
+    Play an audio CD. Navigate tracks using chapter seek keys (`Page Up` / `Page Down`).
+
+    ```bash
+    mpv cdda://                         # play the whole disc
+    mpv cdda:// --start=#4 --end=#6     # play tracks 4 and 5, then exit
+    ```
+  </Accordion>
+
+  <Accordion title="FFmpeg protocols — lavf://">
+    Pass a string directly to FFmpeg's libavformat:
+
+    ```bash
+    mpv lavf://v4l2:/dev/video0
+    ```
+  </Accordion>
+
+  <Accordion title="libavdevice inputs — av://">
+    Use libavdevice demuxers. `type` is the demuxer name and `options` is the pseudo-filename:
+
+    ```bash
+    mpv av://v4l2:/dev/video0 --profile=low-latency --untimed
+    ```
+
+    `avdevice://` is an alias.
+  </Accordion>
+
+  <Accordion title="File descriptor — fd://">
+    Read from an arbitrary file descriptor. Similar to piping to stdin, but uses the specified descriptor number:
+
+    ```bash
+    mpv fd://3
+    ```
+
+    Use `fdclose://3` to automatically close the descriptor after use.
+  </Accordion>
+
+  <Accordion title="Samba shares — smb://">
+    Play files from a Samba/SMB network share. Requires FFmpeg built with SMB support:
+
+    ```bash
+    mpv smb://server/share/video.mkv
+    ```
+  </Accordion>
+
+  <Accordion title="Image sequences — mf://">
+    Play a series of images as a video:
+
+    ```bash
+    mpv mf://frame*.png          # glob pattern
+    mpv mf://image-%d.jpg        # printf pattern (image-1.jpg, image-2.jpg, …)
+    mpv mf://@list.txt           # text file with one path per line
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Essential playback options
+
+<CardGroup cols={2}>
+  <Card title="Seeking" icon="forward">
+    ```bash
+    # Seek to a specific time on start
+    mpv --start=01:30:00 movie.mkv
+
+    # Seek to 50% through the file
+    mpv --start=50% movie.mkv
+
+    # Seek to chapter 2
+    mpv --start='#2' movie.mkv
+
+    # Play from 30s to 40s, then exit
+    mpv --start=30 --end=40 clip.mkv
+
+    # Play 10 seconds starting at 3:20 before the end
+    mpv --start=-3:20 --length=10 movie.mkv
+    ```
+  </Card>
+
+  <Card title="Speed and volume" icon="sliders">
+    ```bash
+    # Play at 1.5× speed
+    mpv --speed=1.5 movie.mkv
+
+    # Play at half speed
+    mpv --speed=0.5 movie.mkv
+
+    # Set starting volume (0–100, default varies)
+    mpv --volume=80 movie.mkv
+    ```
+  </Card>
+</CardGroup>
+
+### Looping
+
+```bash
+# Loop a single file forever
+mpv --loop video.mkv
+mpv --loop=inf video.mkv
+
+# Loop a single file 3 times
+mpv --loop=3 video.mkv
+
+# Loop the entire playlist forever
+mpv --loop-playlist file1.mkv file2.mkv
+
+# Loop the playlist 5 times
+mpv --loop-playlist=5 file1.mkv file2.mkv
+```
+
+<Note>
+  `--loop` (alias for `--loop-file`) counts the number of additional seeks to
+  the beginning, not the total number of playthroughs. `--loop=1` plays the
+  file twice. `--loop-playlist` counts full playthroughs, so `--loop-playlist=2`
+  plays the list twice.
+</Note>
+
+### Screenshots
+
+```bash
+# Set the screenshot format (jpg, png, webp, jxl, avif)
+mpv --screenshot-format=png movie.mkv
+```
+
+During playback, press `s` to take a screenshot including subtitles, or `S` to take one without subtitles. Screenshots are saved as `mpv-shotNNNN.<ext>` in the working directory (or the desktop in pseudo-GUI mode).
+
+## Per-file options
+
+When playing multiple files you can apply options to a subset using `--{` and `--}` markers:
+
+```bash
+# --sub-file only applies to file2.mkv and file3.mkv
+mpv file1.mkv --\{ --sub-file=subs.srt file2.mkv file3.mkv --\} file4.mkv
+```

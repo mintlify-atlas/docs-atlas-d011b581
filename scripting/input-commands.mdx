@@ -1,0 +1,636 @@
+---
+title: "Input Commands"
+description: "Reference for mpv's input commands — used in key bindings, scripting, and IPC"
+---
+
+mpv's command interface is shared across all control surfaces: `input.conf` key bindings, the JSON IPC protocol, Lua/JavaScript scripts, and the `libmpv` C API all use the same commands and property names.
+
+## input.conf
+
+The `input.conf` file maps keys to commands. It lives at `~/.config/mpv/input.conf`.
+
+```ini
+s screenshot                     # take a screenshot with the s key
+LEFT seek -15                    # left arrow seeks backward 15 seconds
+RIGHT seek 15                    # right arrow seeks forward 15 seconds
+ctrl+q quit                      # quit with Ctrl+Q
+```
+
+Default bindings are defined at `https://github.com/mpv-player/mpv/blob/master/etc/input.conf`.
+
+List all available key names:
+```bash
+mpv --input-keylist
+```
+
+Test key bindings interactively (shows the binding on OSD instead of executing it):
+```bash
+mpv --input-test --force-window --idle
+```
+
+### Syntax
+
+```text
+[Shift+][Ctrl+][Alt+][Meta+]<key> [{<section>}] <command> [; <command> ...]
+```
+
+- Multiple commands can be chained with `;`
+- `#` begins a comment (outside quoted strings); use `SHARP` to bind the `#` key
+- Strings with spaces or special characters must be quoted: `"..."`, `'...'`, or `` `X...X` `` (custom quotes)
+
+### Multiple commands on one key
+
+```ini
+a show-text "command 1" ; show-text "command 2"
+```
+
+### Key sequences
+
+```ini
+a-b-c show-text "pressed a, then b, then c"
+```
+
+### Key modifiers
+
+| Modifier | Example |
+|----------|---------|
+| `Shift+` | `Shift+LEFT` |
+| `Ctrl+` | `ctrl+q` |
+| `Alt+` | `Alt+F4` |
+| `Meta+` | `Meta+a` |
+
+<Note>
+  For text keys, use the character produced by the key rather than adding `Shift+`. For example, `@` instead of `Shift+2` on a US keyboard. ASCII letters are an exception: `Shift+a` is interpreted as `A`.
+</Note>
+
+### Special key names (selected)
+
+| Name | Description |
+|------|-------------|
+| `LEFT`, `RIGHT`, `UP`, `DOWN` | Arrow keys |
+| `ENTER`, `ESC`, `TAB`, `BS` | Control keys |
+| `SPACE` | Space bar |
+| `KP*` | Numpad keys (e.g. `KP0`, `KP_ENTER`) |
+| `MOUSE_BTN0`–`MOUSE_BTN19` | Mouse buttons |
+| `WHEEL_UP`, `WHEEL_DOWN`, `WHEEL_LEFT`, `WHEEL_RIGHT` | Mouse wheel |
+| `CLOSE_WIN` | Window close button |
+| `GAMEPAD_*` | Gamepad inputs (SDL backend) |
+| `UNMAPPED` | Any unmapped key |
+| `ANY_UNICODE` | Any key that produces text |
+
+---
+
+## Input command prefixes
+
+Prefixes go between the key name and the command in `input.conf`. Multiple prefixes are separated by spaces.
+
+| Prefix | Description |
+|--------|-------------|
+| `osd-auto` | Default OSD behavior for this command (default for `input.conf`) |
+| `no-osd` | Suppress OSD for this command |
+| `osd-bar` | Show a progress bar |
+| `osd-msg` | Show a text OSD message |
+| `osd-msg-bar` | Show both a message and a bar |
+| `raw` | Do not expand `${property}` placeholders in string arguments |
+| `expand-properties` | Expand `${property}` in all string arguments (default for `input.conf`) |
+| `repeatable` | Force key repeat for this command |
+| `nonrepeatable` | Force disable key repeat |
+| `nonscalable` | Disable high-resolution scaling for scalable commands |
+| `async` | Run command asynchronously if possible |
+| `sync` | Run command synchronously if possible |
+
+```ini
+# Show OSD bar when changing volume
+osd-bar add volume 5
+# Seek without any OSD
+no-osd seek 10
+```
+
+---
+
+## Property system
+
+Properties allow reading and writing player state at runtime. They are used by:
+
+- `set`, `add`, `cycle`, `multiply` commands
+- `${property}` expansion in `show-text`, `print-text`
+- Scripting APIs (`mp.get_property`, `mp.observe_property`, etc.)
+- IPC `get_property` / `set_property` commands
+
+Most command-line options are also available as properties (strip the leading `--`). Properties marked **(RW)** can be written; others are read-only.
+
+### Key properties
+
+<CardGroup cols={2}>
+  <Card title="Playback state">
+    | Property | Type | Description |
+    |----------|------|-------------|
+    | `pause` (RW) | bool | Paused state |
+    | `speed` (RW) | number | Playback speed multiplier |
+    | `time-pos` (RW) | number | Current position in seconds |
+    | `playback-time` (RW) | number | Alias for `time-pos` |
+    | `percent-pos` (RW) | number | Position as 0–100 percent |
+    | `duration` | number | File duration in seconds |
+    | `time-remaining` | number | Remaining time in seconds |
+  </Card>
+  <Card title="Audio / video">
+    | Property | Type | Description |
+    |----------|------|-------------|
+    | `volume` (RW) | number | Audio volume (0–100+) |
+    | `mute` (RW) | bool | Mute state |
+    | `fullscreen` (RW) | bool | Fullscreen state |
+    | `video-zoom` (RW) | number | Video zoom factor |
+    | `brightness` (RW) | number | Video brightness (−100 to 100) |
+    | `contrast` (RW) | number | Video contrast |
+    | `sub-delay` (RW) | number | Subtitle delay in seconds |
+  </Card>
+  <Card title="File information">
+    | Property | Type | Description |
+    |----------|------|-------------|
+    | `filename` | string | Filename without path |
+    | `path` | string | Full path of current file |
+    | `media-title` | string | Title tag or filename |
+    | `file-format` | string | Format name (e.g. `matroska`) |
+    | `duration` | number | Total duration in seconds |
+  </Card>
+  <Card title="Playlist">
+    | Property | Type | Description |
+    |----------|------|-------------|
+    | `playlist-pos` (RW) | integer | Current playlist index (0-based) |
+    | `playlist-count` | integer | Number of playlist entries |
+    | `playlist` | list | Full playlist as a list |
+    | `loop-playlist` (RW) | string | Loop mode (`no`, `inf`, `force`) |
+    | `loop-file` (RW) | string | File loop (`no`, `inf`, integer) |
+  </Card>
+</CardGroup>
+
+---
+
+## Command reference
+
+### Playback control
+
+<AccordionGroup>
+  <Accordion title="seek <target> [<flags>]">
+    Change playback position.
+
+    **Flags** (combine with `+`):
+
+    | Flag | Description |
+    |------|-------------|
+    | `relative` (default) | Seek relative to current position; negative = backwards |
+    | `absolute` | Seek to exact time; negative = from end of file |
+    | `absolute-percent` | Seek to a percentage of total duration |
+    | `relative-percent` | Seek relative to current position in percent |
+    | `keyframes` | Fast seek to nearest keyframe |
+    | `exact` | Precise (slow) seek |
+
+    By default `keyframes` is used for relative seeks and `exact` for absolute seeks. Combine flags:
+
+    ```ini
+    RIGHT seek 10 relative+keyframes
+    END   seek 100 absolute-percent+exact
+    ```
+
+    In scripts:
+    ```lua
+    mp.commandv("seek", "30", "relative")
+    mp.commandv("seek", "50", "absolute-percent")
+    ```
+  </Accordion>
+
+  <Accordion title="revert-seek [<flags>]">
+    Undo the most recent seek. Call again to undo the revert. Works within a single file.
+
+    Flags: `mark` (mark current position for revert), `mark-permanent` (always revert to this position until changed).
+  </Accordion>
+
+  <Accordion title="frame-step [<frames>] [<flags>]">
+    Advance or step back by frames. Default is 1 frame. Flags: `play` (default — play then pause), `seek` (precise seek), `mute` (like `play` but muted). Does not work with audio-only playback.
+  </Accordion>
+
+  <Accordion title="frame-back-step">
+    Step back exactly one frame. Equivalent to `frame-step -1 seek`. Does not work with audio-only playback.
+  </Accordion>
+
+  <Accordion title="stop [<flags>]">
+    Stop playback. With `keep-playlist`, the playlist is not cleared.
+
+    ```ini
+    q stop
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Property manipulation
+
+<AccordionGroup>
+  <Accordion title="set <name> <value>">
+    Set a property or option to a value.
+
+    ```ini
+    ctrl+m set mute yes
+    f       set fullscreen yes
+    ```
+
+    ```lua
+    mp.commandv("set", "volume", "80")
+    ```
+  </Accordion>
+
+  <Accordion title="add <name> [<value>]">
+    Add `value` (default: 1) to a property, clamping at min/max. Scalable: on high-precision inputs (touchpads), the value is scaled to finer steps automatically.
+
+    ```ini
+    9 add volume 5
+    0 add volume -5
+    ```
+  </Accordion>
+
+  <Accordion title="multiply <name> <factor>">
+    Multiply a property by the given numeric factor.
+
+    ```ini
+    * multiply speed 1.1
+    / multiply speed 0.9090909
+    ```
+  </Accordion>
+
+  <Accordion title="cycle <name> [up|down]">
+    Cycle a property through its valid values. Wraps around at min/max. Default direction is `up`.
+
+    ```ini
+    m cycle mute
+    o cycle osd-level
+    ```
+  </Accordion>
+
+  <Accordion title="cycle-values [!reverse] <property> <value1> [<value2> ...]">
+    Cycle through a specific list of values. Each invocation advances to the next value, wrapping around.
+
+    ```ini
+    x cycle-values loop-file "inf" "no"
+    ```
+
+    The `!reverse` argument (must come first) cycles in reverse order.
+  </Accordion>
+
+  <Accordion title="del <name>">
+    Delete a property. Most properties cannot be deleted.
+  </Accordion>
+
+  <Accordion title="change-list <name> <operation> <value>">
+    Modify a list-type option. Operations include `append`, `prepend`, `remove`, `clr`, etc.
+
+    ```ini
+    # Add a GLSL shader
+    F5 change-list glsl-shaders append /path/to/shader.glsl
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Playlist
+
+<AccordionGroup>
+  <Accordion title="loadfile <url> [<flags> [<index> [<options>]]]">
+    Load and play a file or URL.
+
+    **Flags:**
+
+    | Flag | Description |
+    |------|-------------|
+    | `replace` (default) | Stop current file and play the new one |
+    | `append` | Add to end of playlist |
+    | `append+play` | Append and start playing if idle |
+    | `insert-next` | Insert directly after current entry |
+    | `insert-at` | Insert at the given index (third arg) |
+    | `play` | Combine with `append`/`insert-*` to force playback start |
+
+    The fourth argument is a comma-separated `opt=value` list of per-file options.
+
+    ```lua
+    mp.commandv("loadfile", "https://example.com/video.mp4", "replace")
+    mp.commandv("loadfile", "/tmp/another.mkv", "append")
+    ```
+  </Accordion>
+
+  <Accordion title="loadlist <url> [<flags> [<index>]]">
+    Load a playlist file or URL. Same flags as `loadfile` (`replace`, `append`, `insert-next`, `insert-at`, `play`).
+  </Accordion>
+
+  <Accordion title="playlist-next [<flags>]">
+    Go to the next playlist entry. Flags: `weak` (default — do nothing on last entry), `force` (quit on last entry).
+
+    ```ini
+    > playlist-next
+    ```
+  </Accordion>
+
+  <Accordion title="playlist-prev [<flags>]">
+    Go to the previous playlist entry. Same flags as `playlist-next`.
+
+    ```ini
+    < playlist-prev
+    ```
+  </Accordion>
+
+  <Accordion title="playlist-play-index <index|current|none> [preserve-options]">
+    Start or restart playback at the given playlist index (0-based). `current` replays the current entry; `none` stops playback.
+  </Accordion>
+
+  <Accordion title="playlist-clear">
+    Clear the playlist, except the currently playing file.
+  </Accordion>
+
+  <Accordion title="playlist-remove <index>">
+    Remove a playlist entry by index. `current` removes the currently playing entry and starts the next.
+  </Accordion>
+
+  <Accordion title="playlist-move <index1> <index2>">
+    Move the entry at `index1` to the position of `index2`.
+  </Accordion>
+
+  <Accordion title="playlist-shuffle">
+    Shuffle the playlist.
+  </Accordion>
+
+  <Accordion title="playlist-unshuffle">
+    Attempt to undo a previous `playlist-shuffle`. Works only once.
+  </Accordion>
+</AccordionGroup>
+
+### Screenshot
+
+<AccordionGroup>
+  <Accordion title="screenshot [<flags>]">
+    Take a screenshot. Flags (combine with `+`):
+
+    | Flag | Description |
+    |------|-------------|
+    | `subtitles` (default) | Video with subtitles |
+    | `video` | Raw video, no OSD or subtitles |
+    | `scaled` | Video at current display resolution |
+    | `window` | Entire mpv window (alias for `scaled+subtitles+osd`) |
+    | `osd` | Include OSD |
+    | `each-frame` | Screenshot every frame (toggle; run again to stop) |
+
+    ```ini
+    s screenshot
+    S screenshot video
+    ```
+
+    Returns a node map with `filename` set to the saved path.
+  </Accordion>
+
+  <Accordion title="screenshot-to-file <filename> [<flags>]">
+    Take a screenshot and save it to a specific file. The format is determined by the file extension. Existing files are overwritten. Property expansion is applied to `filename`.
+  </Accordion>
+</AccordionGroup>
+
+### OSD and text
+
+<AccordionGroup>
+  <Accordion title="show-text <text> [<duration>|-1 [<level>]]">
+    Show text on the OSD. Properties are expanded (e.g. `${playback-time}`). `no-osd` prefix has no effect on this command.
+
+    `duration` is in milliseconds (default: `--osd-duration`). `level` is the minimum OSD level required to show the text.
+
+    ```ini
+    i show-text "${filename} (${playback-time})"
+    ```
+
+    ```lua
+    mp.commandv("show-text", "Hello from Lua!", "3000")
+    ```
+  </Accordion>
+
+  <Accordion title="show-progress">
+    Show the progress bar, elapsed time, and total duration on the OSD.
+  </Accordion>
+
+  <Accordion title="print-text <text>">
+    Print text to stdout. Properties are expanded.
+  </Accordion>
+</AccordionGroup>
+
+### Scripting and messaging
+
+<AccordionGroup>
+  <Accordion title="script-message [<arg1> [<arg2> ...]]">
+    Send a message to all scripts. Arguments are arbitrary strings. All scripts receive the message.
+
+    ```ini
+    x script-message my-event arg1 arg2
+    ```
+
+    In Lua, register a handler with `mp.register_script_message("my-event", fn)`.
+  </Accordion>
+
+  <Accordion title="script-message-to <target> [<arg1> ...]">
+    Like `script-message`, but send only to the named client. The target name is the script's internal name (as returned by `mp.get_script_name()`).
+
+    ```ini
+    x script-message-to my_script my-event arg1
+    ```
+  </Accordion>
+
+  <Accordion title="script-binding <name> [<arg>]">
+    Invoke a key binding registered by a script via `mp.add_key_binding`. Useful for remapping script bindings.
+
+    ```ini
+    y script-binding my_script/some-action
+    ```
+  </Accordion>
+
+  <Accordion title="load-script <filename>">
+    Load a script at runtime, similar to `--script`. Returns a `client_id` field in the result.
+  </Accordion>
+</AccordionGroup>
+
+### Execution
+
+<AccordionGroup>
+  <Accordion title="run <command> [<arg1> ...]">
+    Run an external program. Unlike the shell, arguments are passed directly without shell interpretation. The program is detached — mpv continues immediately without waiting.
+
+    ```ini
+    # Write the playing title to a file
+    ctrl+t run "/bin/sh" "-c" "echo ${media-title} > /tmp/playing"
+    ```
+
+    Use `subprocess` when you need to wait for the result or capture output.
+  </Accordion>
+
+  <Accordion title="subprocess">
+    Run an external program with full control. Uses named arguments.
+
+    Key parameters:
+
+    | Parameter | Type | Description |
+    |-----------|------|-------------|
+    | `args` | string array | Command and arguments |
+    | `playback_only` | bool | Kill process when playback ends (default: true) |
+    | `capture_stdout` | bool | Capture stdout (default: false) |
+    | `capture_stderr` | bool | Capture stderr (default: false) |
+    | `capture_size` | integer | Max bytes to capture per stream (default: 64 MB) |
+    | `stdin_data` | string | Data to feed to stdin |
+    | `env` | string array | Environment variables (`NAME=VALUE` format) |
+    | `detach` | bool | Run detached (default: false) |
+
+    ```lua
+    local r = mp.command_native({
+        name = "subprocess",
+        playback_only = false,
+        capture_stdout = true,
+        args = {"cat", "/proc/cpuinfo"},
+    })
+    if r.status == 0 then
+        mp.msg.info(r.stdout)
+    end
+    ```
+
+    The result includes `status`, `stdout`, `stderr`, `error_string`, and `killed_by_us`.
+  </Accordion>
+</AccordionGroup>
+
+### Quit
+
+| Command | Description |
+|---------|-------------|
+| `quit [<code>]` | Exit mpv with optional exit code |
+| `quit-watch-later [<code>]` | Exit and save playback position for resuming |
+
+```ini
+q quit
+Q quit-watch-later
+```
+
+### Track manipulation
+
+| Command | Description |
+|---------|-------------|
+| `sub-add <url> [<flags> [<title> [<lang>]]]` | Load an external subtitle file |
+| `sub-remove [<id>]` | Remove subtitle track (external only) |
+| `sub-reload [<id>]` | Reload subtitle track (external only) |
+| `sub-step <skip> [<flags>]` | Adjust subtitle timing by N events |
+| `sub-seek <skip> [<flags>]` | Seek to N-th subtitle event |
+| `audio-add <url> [<flags> [<title> [<lang>]]]` | Load external audio track |
+| `audio-remove [<id>]` | Remove audio track |
+| `audio-reload [<id>]` | Reload audio track |
+| `video-add <url> [<flags> [<title> [<lang>]]]` | Load external video track |
+| `video-remove [<id>]` | Remove video track |
+
+### Filter commands
+
+| Command | Description |
+|---------|-------------|
+| `vf <op> <value>` | Modify video filter chain (`set`, `add`, `toggle`, `remove`, `clr`) |
+| `af <op> <value>` | Modify audio filter chain (same ops as `vf`) |
+| `vf-command <label> <cmd> <arg>` | Send a command to a `lavfi` video filter |
+| `af-command <label> <cmd> <arg>` | Send a command to a `lavfi` audio filter |
+
+```ini
+a vf set vflip           # flip video upside-down
+b vf set ""              # remove all video filters
+c vf toggle gradfun      # toggle debanding filter
+```
+
+### Configuration commands
+
+| Command | Description |
+|---------|-------------|
+| `apply-profile <name> [apply\|restore]` | Apply or restore a named config profile |
+| `load-config-file <filename>` | Load an additional config file at runtime |
+| `load-input-conf <filename>` | Load an additional input config file at runtime |
+| `write-watch-later-config` | Save resume position without quitting |
+
+### Miscellaneous
+
+| Command | Description |
+|---------|-------------|
+| `ignore` | Do nothing (use to block a key without disabling all defaults) |
+| `drop-buffers` | Flush audio/video/demuxer buffers and restart |
+| `ab-loop` | Cycle A-B loop states (set A, set B, clear) |
+| `keypress <name>` | Simulate a key press event |
+| `keydown <name>` | Simulate key-down (with repeat) |
+| `keyup [<name>]` | Simulate key-up, stopping repeat |
+| `keybind <name> <cmd>` | Dynamically bind a key to a command |
+| `begin-vo-dragging` | Begin window dragging (if VO supports it) |
+
+---
+
+## Property expansion
+
+Properties can be embedded in string arguments with `${property-name}`. Use `${=property-name}` for the raw (unformatted) value.
+
+```ini
+i show-text "${media-title} [${time-pos} / ${duration}]"
+```
+
+Disable expansion with the `raw` prefix or `$>` within the string:
+
+```ini
+x show-text "literal: $>no ${expansion} here"
+```
+
+Property expansion happens after argument parsing. It applies by default in `input.conf` commands but not in scripting API calls (use `expand-properties` prefix to enable it there).
+
+---
+
+## Events
+
+Events are notifications sent from the player core to scripts and IPC clients. See also: [Lua scripting events](/scripting/lua-scripting#events-reference).
+
+<CardGroup cols={2}>
+  <Card title="start-file">
+    Before a file starts loading. Fields: `playlist_entry_id`.
+  </Card>
+  <Card title="file-loaded">
+    After a file is loaded and playback begins.
+  </Card>
+  <Card title="end-file">
+    After a file is unloaded. Fields: `reason` (`eof`, `stop`, `quit`, `error`, `redirect`), `playlist_entry_id`.
+  </Card>
+  <Card title="seek">
+    On any seek (including internal seeks).
+  </Card>
+  <Card title="playback-restart">
+    Start of playback after seek or file load.
+  </Card>
+  <Card title="shutdown">
+    mpv is exiting.
+  </Card>
+  <Card title="property-change">
+    An observed property changed. Fields: `name`, `data`.
+  </Card>
+  <Card title="log-message">
+    A log message. Fields: `prefix`, `level`, `text`.
+  </Card>
+  <Card title="video-reconfig">
+    Video output or filter reconfigured.
+  </Card>
+  <Card title="audio-reconfig">
+    Audio output or filter reconfigured.
+  </Card>
+  <Card title="client-message">
+    A `script-message` was received. Fields: `args` (string array).
+  </Card>
+</CardGroup>
+
+---
+
+## Hooks
+
+Hooks block the player until all registered handlers call `cont()` (or return if `defer()` was not called). They provide synchronous control at specific points.
+
+| Hook | Timing |
+|------|--------|
+| `on_load` | Before opening a file |
+| `on_load_fail` | After file open fails |
+| `on_preloaded` | After open, before track selection |
+| `on_loaded` | After track selection, before playback |
+| `on_unload` | Before closing a file |
+| `on_before_start_file` | Before `start-file` event |
+| `on_after_end_file` | After `end-file` event |
+
+See [Lua scripting — hooks](/scripting/lua-scripting#hooks) for usage details.

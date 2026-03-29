@@ -1,80 +1,179 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Play your first file and learn mpv's core controls in minutes"
 ---
 
-## Get started in three steps
+## Play your first file
 
-Get your documentation site running locally and make your first customization.
+Open a terminal and pass a file path or URL to `mpv`:
 
-### Step 1: Set up your local environment
+<Steps>
+  <Step title="Play a local file">
+    ```bash
+    mpv video.mkv
+    ```
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    mpv auto-detects the best video and audio output for your system. The video opens in a window; the terminal shows playback status.
+  </Step>
+  <Step title="Play a URL or stream">
+    mpv accepts HTTP/HTTPS URLs, HLS streams, and other network sources directly:
 
-### Step 2: Deploy your changes
+    ```bash
+    mpv https://example.com/video.mp4
+    ```
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    <Tip>
+      mpv reads from stdin too. Pipe media data with `mpv -` to play without a file on disk.
+    </Tip>
+  </Step>
+  <Step title="Play audio only">
+    Pass an audio file the same way — mpv opens in audio-only mode with no video window:
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    ```bash
+    mpv music.flac
+    ```
+  </Step>
+</Steps>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+## Essential keyboard shortcuts
 
-### Step 3: Go live
+Once mpv is playing, use the keyboard to control it. The control layer is fully configurable; these are the defaults.
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+### Playback
+
+| Key | Action |
+|---|---|
+| `Space` or `p` | Toggle pause |
+| `q` | Stop and quit |
+| `Q` | Quit and save position for later resumption |
+| `Left` / `Right` | Seek backward/forward 5 seconds |
+| `Up` / `Down` | Seek forward/backward 1 minute |
+| `Shift+Left` / `Shift+Right` | Exact seek ±1 second |
+| `<` / `>` | Go backward/forward in the playlist |
+| `[` / `]` | Decrease/increase playback speed by 10% |
+| `Backspace` | Reset playback speed to normal |
+
+### Volume and display
+
+| Key | Action |
+|---|---|
+| `9` / `0` | Decrease/increase volume |
+| `m` | Toggle mute |
+| `f` | Toggle fullscreen |
+| `ESC` | Exit fullscreen |
+| `s` | Take a screenshot (with subtitles) |
+| `S` | Take a screenshot (without subtitles) |
+
+### Subtitles and tracks
+
+| Key | Action |
+|---|---|
+| `v` | Toggle subtitle visibility |
+| `j` / `J` | Cycle through available subtitle tracks |
+| `#` | Cycle through available audio tracks |
+| `_` | Cycle through available video tracks |
+
+### Stats and debugging
+
+| Key | Action |
+|---|---|
+| `i` | Toggle statistics overlay (codec, framerate, dropped frames, etc.) |
+| `?` | Toggle active key bindings overlay |
+
+<Note>
+  Press `?` at any time while mpv is running to see all active key bindings in the video window.
+</Note>
+
+## Common command-line options
+
+Pass options as `--option=value` after the filename or before it:
+
+```bash
+# Open in fullscreen
+mpv --fs video.mkv
+
+# Start at a specific time (2 minutes 30 seconds in)
+mpv --start=2:30 video.mkv
+
+# Force a specific audio track
+mpv --aid=2 video.mkv
+
+# Enable hardware decoding
+mpv --hwdec=auto video.mkv
+
+# Loop the file indefinitely
+mpv --loop video.mkv
+
+# Set volume (0–100, default is 100)
+mpv --volume=80 video.mkv
+```
+
+## Set up a config file
+
+Rather than typing options on every invocation, write them to `~/.config/mpv/mpv.conf`. Options in this file are applied on every run.
+
+<Steps>
+  <Step title="Create the config directory">
+    ```bash
+    mkdir -p ~/.config/mpv
+    ```
+  </Step>
+  <Step title="Create mpv.conf">
+    ```bash
+    touch ~/.config/mpv/mpv.conf
+    ```
+  </Step>
+  <Step title="Add your preferred settings">
+    Open `~/.config/mpv/mpv.conf` in a text editor and add options — one per line, without the leading `--`:
+
+    ```ini
+    # Use the modern GPU video output driver
+    vo=gpu-next
+
+    # Enable safe hardware decoding when available
+    hwdec=auto-safe
+
+    # Load external subtitle files automatically (fuzzy filename match)
+    sub-auto=fuzzy
+
+    # Start at 80% volume
+    volume=80
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  On Windows, the config file is at `%APPDATA%\mpv\mpv.conf` (for example, `C:\Users\USERNAME\AppData\Roaming\mpv\mpv.conf`).
+</Note>
+
+### Video output
+
+The default high-quality video output driver is `gpu-next`, built on libplacebo. It uses shaders for scaling and rendering rather than fixed GPU hardware functions.
+
+```ini
+# Recommended: modern GPU output via libplacebo
+vo=gpu-next
+```
+
+On low-power or integrated GPUs where you experience stuttering or tearing, use the fast profile:
+
+```bash
+mpv --profile=fast video.mkv
+```
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Keyboard controls" icon="keyboard" href="/usage/keyboard-controls">
+    Full default key binding reference and how to customize them.
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/usage/configuration">
+    All mpv.conf options and how to tune mpv for your setup.
+  </Card>
+  <Card title="Video output" icon="display" href="/av/video-output">
+    Configure GPU-accelerated rendering, scaling, and HDR.
+  </Card>
+  <Card title="Scripting" icon="code" href="/scripting/lua-scripting">
+    Extend mpv with Lua or JavaScript scripts.
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

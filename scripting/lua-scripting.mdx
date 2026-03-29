@@ -1,0 +1,605 @@
+---
+title: "Lua Scripting"
+description: "Extend mpv with Lua scripts — event handlers, key bindings, properties, and more"
+---
+
+mpv loads Lua scripts automatically and exposes a built-in `mp` module that lets scripts send commands, read and write properties, react to events, and register key bindings. Internally, Lua scripts use the same client API as any other mpv controller.
+
+## Script location
+
+Scripts are loaded from two places:
+
+- **Automatically:** any `.lua` file in `~/.config/mpv/scripts/`
+- **Explicitly:** passed with the `--script` flag: `mpv --script=/path/to/myscript.lua file.mkv`
+
+mpv derives a script's internal name by stripping the `.lua` extension and replacing non-alphanumeric characters with `_`. For example, `my-tools.lua` becomes `my_tools`. If multiple scripts share the same derived name, a number is appended to make it unique.
+
+Files with a `.disable` extension are always ignored.
+
+### Directory scripts
+
+A script can be a directory instead of a single file. mpv looks for `main.lua` inside that directory. This is the recommended layout for scripts that span multiple source files or need to load data files:
+
+```
+~/.config/mpv/scripts/
+└── my-script/
+    ├── main.lua       ← entry point
+    ├── helpers.lua
+    └── data/
+```
+
+Use `mp.get_script_directory()` inside the script to locate the directory at runtime. The directory is also prepended to Lua's `package.path`, so you can `require` modules from it directly.
+
+## Lifecycle
+
+Each script runs in its own thread. On startup:
+
+1. mpv executes the script's top-level code.
+2. The built-in event loop (`mp_event_loop`) starts, dispatching events to registered handlers.
+
+The player waits until the script enters the event loop before beginning playback. When mpv quits, it sends a `shutdown` event, which makes the event loop return.
+
+<Warning>
+  If your script enters an infinite loop before calling `mp_event_loop`, mpv will hang on exit waiting for it to terminate.
+</Warning>
+
+<Note>
+  Since scripts start concurrently with player initialization, some properties may not yet be populated at top-level. Read property values inside event handlers or with `mp.observe_property` instead.
+</Note>
+
+## Quick example
+
+A script that exits fullscreen whenever playback is paused:
+
+```lua
+function on_pause_change(name, value)
+    if value == true then
+        mp.set_property("fullscreen", "no")
+    end
+end
+mp.observe_property("pause", "bool", on_pause_change)
+```
+
+Save this as `~/.config/mpv/scripts/exit-fullscreen-on-pause.lua` and it will be loaded automatically.
+
+---
+
+## mp module
+
+The `mp` module is preloaded. You can also load it explicitly with `require 'mp'`.
+
+### Commands
+
+<AccordionGroup>
+  <Accordion title="mp.command(string)">
+    Run an input command given as a single string. Behaves like a command in `input.conf`, including OSD display.
+
+    Returns `true` on success, or `nil, error` on failure.
+
+    ```lua
+    mp.command("set volume 80")
+    mp.command("seek 30 relative")
+    ```
+  </Accordion>
+
+  <Accordion title="mp.commandv(arg1, arg2, ...)">
+    Like `mp.command`, but each argument is passed separately — no quoting or escaping needed. OSD is not shown by default.
+
+    ```lua
+    -- These two are equivalent, but the second is safer with special characters:
+    mp.command("loadfile " .. filename .. " append")
+    mp.commandv("loadfile", filename, "append")
+    ```
+
+    Note: properties are **not** expanded in arguments. Use `mp.get_property` to read values first.
+  </Accordion>
+
+  <Accordion title="mp.command_native(table [, def])">
+    Like `mp.commandv`, but arguments are passed as a Lua table. Supports native types (booleans, numbers) and named arguments.
+
+    For named arguments, include a `name` key with the command name:
+
+    ```lua
+    local result = mp.command_native({
+        name = "subprocess",
+        playback_only = false,
+        capture_stdout = true,
+        args = {"cat", "/etc/hostname"},
+    })
+    if result.status == 0 then
+        mp.msg.info("hostname: " .. result.stdout)
+    end
+    ```
+
+    Returns a result table on success, or `def, error` on failure.
+  </Accordion>
+
+  <Accordion title="mp.command_native_async(table [, fn])">
+    Like `mp.command_native`, but runs asynchronously. `fn(success, result, error)` is called on completion.
+
+    ```lua
+    mp.command_native_async({
+        name = "subprocess",
+        args = {"notify-send", "mpv", "done!"},
+        playback_only = false,
+    }, function(success, result, err)
+        if not success then
+            mp.msg.error("subprocess failed: " .. tostring(err))
+        end
+    end)
+    ```
+
+    Returns a handle that can be passed to `mp.abort_async_command`.
+  </Accordion>
+
+  <Accordion title="mp.abort_async_command(handle)">
+    Abort a running async command. Takes the return value of `mp.command_native_async`. Whether the abort succeeds depends on the command.
+  </Accordion>
+</AccordionGroup>
+
+### Properties
+
+<AccordionGroup>
+  <Accordion title="mp.get_property(name [, def])">
+    Return the property value as a string (formatted like `${=name}`). Returns `def, error` on failure (`def` defaults to `nil`).
+
+    ```lua
+    local vol = mp.get_property("volume")
+    mp.msg.info("volume is " .. vol)
+    ```
+  </Accordion>
+
+  <Accordion title="mp.get_property_osd(name [, def])">
+    Return the property formatted for OSD display (same as `${name}` in `input.conf`). Always returns a string (empty string on error unless `def` is set).
+  </Accordion>
+
+  <Accordion title="mp.get_property_bool(name [, def])">
+    Return the property as a Lua boolean. Returns `def, error` on failure.
+
+    ```lua
+    if mp.get_property_bool("pause") then
+        mp.msg.info("player is paused")
+    end
+    ```
+  </Accordion>
+
+  <Accordion title="mp.get_property_number(name [, def])">
+    Return the property as a Lua number (double). Returns `def, error` on failure.
+
+    ```lua
+    local pos = mp.get_property_number("time-pos", 0)
+    ```
+  </Accordion>
+
+  <Accordion title="mp.get_property_native(name [, def])">
+    Return the property in the most appropriate Lua type. Complex properties like `chapter-list` are returned as tables.
+  </Accordion>
+
+  <Accordion title="mp.set_property(name, value)">
+    Set a property to the given string value. Returns `true` on success, `nil, error` on failure.
+
+    ```lua
+    mp.set_property("volume", "80")
+    mp.set_property("fullscreen", "yes")
+    ```
+  </Accordion>
+
+  <Accordion title="mp.set_property_bool(name, value)">
+    Set a property to the given boolean value.
+
+    ```lua
+    mp.set_property_bool("pause", true)
+    ```
+  </Accordion>
+
+  <Accordion title="mp.set_property_number(name, value)">
+    Set a property to the given numeric value. mpv will use an integer if the value can be represented as one, otherwise a double float.
+  </Accordion>
+
+  <Accordion title="mp.set_property_native(name, value)">
+    Set a property using its native Lua type. Useful for properties that take tables. Avoid for simple string/bool/number properties.
+  </Accordion>
+
+  <Accordion title="mp.del_property(name)">
+    Delete the given property. Most properties cannot be deleted. Returns `true` on success, `nil, error` on failure.
+  </Accordion>
+
+  <Accordion title="mp.observe_property(name, type, fn)">
+    Call `fn(name, value)` whenever `name` changes. `type` controls how the value is retrieved: `"bool"`, `"string"`, `"number"`, `"native"`, or `nil`/`"none"` (no value passed).
+
+    You always receive an initial notification with the current value.
+
+    ```lua
+    mp.observe_property("volume", "number", function(name, value)
+        mp.msg.info("volume changed to " .. tostring(value))
+    end)
+    ```
+
+    Change events are coalesced: if the property changes many times in rapid succession, only the last value triggers the callback.
+  </Accordion>
+
+  <Accordion title="mp.unobserve_property(fn)">
+    Remove all property observers registered with the given function reference.
+  </Accordion>
+</AccordionGroup>
+
+### Key bindings
+
+<AccordionGroup>
+  <Accordion title="mp.add_key_binding(key, name, fn [, flags])">
+    Register `fn` to be called when `key` is pressed. `key` uses the same names as `input.conf` (e.g. `"ctrl+a"`, `"F5"`). `name` is a unique symbolic name for the binding.
+
+    Users can remap the binding in their `input.conf`:
+
+    ```ini
+    y script-binding myscript/something
+    ```
+
+    The `flags` table accepts:
+
+    | Key | Type | Description |
+    |-----|------|-------------|
+    | `repeatable` | boolean | Enable key repeat |
+    | `complex` | boolean | Call `fn` on key down, repeat, and up events |
+    | `scalable` | boolean | Enable scaling (only with `complex = true`) |
+
+    ```lua
+    mp.add_key_binding("x", "something", function()
+        mp.msg.info("x was pressed")
+    end)
+    ```
+  </Accordion>
+
+  <Accordion title="mp.add_forced_key_binding(...)">
+    Like `mp.add_key_binding`, but this binding overrides even user-defined bindings in `input.conf`. Use sparingly.
+  </Accordion>
+
+  <Accordion title="mp.remove_key_binding(name)">
+    Remove a binding registered with `mp.add_key_binding` or `mp.add_forced_key_binding` by name.
+  </Accordion>
+</AccordionGroup>
+
+### Events
+
+<AccordionGroup>
+  <Accordion title="mp.register_event(name, fn)">
+    Call `fn(event)` when the named event occurs. `event` is a table with at least an `event` field (the event name string). Returns `true` if the event exists, `false` otherwise.
+
+    ```lua
+    mp.register_event("file-loaded", function(event)
+        mp.msg.info("loaded: " .. mp.get_property("filename"))
+    end)
+    ```
+  </Accordion>
+
+  <Accordion title="mp.unregister_event(fn)">
+    Remove all event handlers equal to `fn`. Uses Lua `==` comparison — be careful with closures.
+  </Accordion>
+</AccordionGroup>
+
+### Timers
+
+<AccordionGroup>
+  <Accordion title="mp.add_timeout(seconds, fn [, disabled])">
+    Call `fn` once after `seconds` seconds. Returns a timer object. If `disabled` is `true`, the timer starts in a paused state and must be started manually with `:resume()`.
+
+    ```lua
+    mp.add_timeout(5, function()
+        mp.msg.info("5 seconds have elapsed")
+    end)
+    ```
+  </Accordion>
+
+  <Accordion title="mp.add_periodic_timer(seconds, fn [, disabled])">
+    Call `fn` repeatedly every `seconds` seconds. Returns a timer object with these methods:
+
+    | Method | Description |
+    |--------|-------------|
+    | `stop()` | Pause the timer, remembering elapsed time |
+    | `kill()` | Stop and reset the timer |
+    | `resume()` | Start or unpause the timer |
+    | `is_enabled()` | Check if the timer is active |
+
+    The object also has `timeout` (RW) and `oneshot` (RW) fields.
+
+    ```lua
+    local seconds = 0
+    local t = mp.add_periodic_timer(1, function()
+        seconds = seconds + 1
+        mp.msg.info("tick " .. seconds)
+        if seconds >= 10 then
+            t:kill()
+        end
+    end)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Script identity and messaging
+
+| Function | Description |
+|----------|-------------|
+| `mp.get_script_name()` | Returns the script's internal name (e.g. `my_script`) |
+| `mp.get_script_directory()` | Returns the script directory path (directory scripts only) |
+| `mp.get_time()` | Returns current mpv internal time in seconds |
+| `mp.osd_message(text [, duration])` | Show text on the OSD; `duration` in seconds |
+| `mp.get_opt(key)` | Read a value from `--script-opts` |
+
+### Script messages
+
+```lua
+-- Register a handler for a named message
+mp.register_script_message("my-action", function(arg1, arg2)
+    mp.msg.info("received: " .. arg1 .. ", " .. arg2)
+end)
+
+-- Unregister it
+mp.unregister_script_message("my-action")
+```
+
+Send from input.conf or another script:
+```ini
+x script-message my-action hello world
+x script-message-to my_script my-action hello world
+```
+
+### Hooks
+
+Hooks let scripts run synchronous code at specific points in the player's lifecycle. Use `mp.add_hook` to register them.
+
+```lua
+mp.add_hook("on_load", 50, function(hook)
+    local url = mp.get_property("stream-open-filename")
+    -- Optionally redirect the URL
+    mp.set_property("stream-open-filename", url .. "?quality=hd")
+    -- Continue the hook (called automatically if hook:defer() was not used)
+end)
+```
+
+`priority` is an integer; 50 is the recommended neutral default. Lower values run first.
+
+Available hook types:
+
+| Hook | Description |
+|------|-------------|
+| `on_load` | Before a file is opened |
+| `on_load_fail` | After a file fails to open |
+| `on_preloaded` | After open, before track selection |
+| `on_loaded` | After tracks selected, before playback starts |
+| `on_unload` | Before a file is closed |
+| `on_before_start_file` | Before `start-file` event |
+| `on_after_end_file` | After `end-file` event |
+
+---
+
+## mp.msg module
+
+Load with `require 'mp.msg'` or use via `mp.msg.*`.
+
+```lua
+local msg = require 'mp.msg'
+
+msg.info("informational message")
+msg.warn("something unexpected")
+msg.error("something went wrong")
+msg.debug("verbose debug info")
+```
+
+Log levels in order of severity: `fatal`, `error`, `warn`, `info`, `v`, `debug`, `trace`. By default, `v`, `debug`, and `trace` are hidden unless the user enables verbose output.
+
+`msg.log(level, ...)` is the generic form; all others are shortcuts.
+
+---
+
+## mp.options module
+
+Parse options from a config file and/or `--script-opts` on the command line.
+
+```lua
+local options = require 'mp.options'
+
+local opts = {
+    optionA = "defaultvalueA",
+    optionB = -0.5,
+    optionC = true,
+}
+
+options.read_options(opts, "myscript")
+mp.msg.info("optionA = " .. opts.optionA)
+```
+
+The config file is read from `~/.config/mpv/script-opts/myscript.conf`:
+
+```ini
+# comment
+optionA=Hello World
+optionB=9999
+optionC=no
+```
+
+Command-line options are prefixed with the identifier:
+
+```bash
+mpv --script-opts=myscript-optionA=TEST,myscript-optionC=yes file.mkv
+```
+
+Pass an `on_update` callback as the third argument to `read_options` to react to runtime changes via the `script-opts` property.
+
+---
+
+## mp.utils module
+
+<Warning>
+  Functions in `mp.utils` may be removed or changed in future mpv versions. They are not part of the guaranteed stable API.
+</Warning>
+
+<AccordionGroup>
+  <Accordion title="File system">
+    ```lua
+    local utils = require 'mp.utils'
+
+    -- Current working directory
+    local cwd = utils.getcwd()
+
+    -- List files in a directory
+    local entries = utils.readdir("/tmp", "files")  -- "files", "dirs", or "normal"
+
+    -- Stat a file
+    local info = utils.file_info("/tmp/foo.txt")
+    -- info.size, info.mtime, info.is_file, info.is_dir, ...
+
+    -- Path manipulation
+    local dir, name = utils.split_path("/home/user/file.mp4")
+    local full = utils.join_path(dir, "other.mp4")
+    ```
+  </Accordion>
+
+  <Accordion title="Subprocess">
+    ```lua
+    local utils = require 'mp.utils'
+
+    -- Preferred: use mp.command_native directly
+    local r = mp.command_native({
+        name = "subprocess",
+        playback_only = false,
+        capture_stdout = true,
+        args = {"date"},
+    })
+    if r.status == 0 then
+        mp.msg.info("date: " .. r.stdout)
+    end
+
+    -- Legacy wrapper (still works)
+    local r2 = utils.subprocess({args = {"uname", "-r"}})
+    ```
+  </Accordion>
+
+  <Accordion title="JSON">
+    ```lua
+    local utils = require 'mp.utils'
+
+    local obj = utils.parse_json('{"key": "value"}')
+    local str = utils.format_json({key = "value"})
+    ```
+  </Accordion>
+
+  <Accordion title="Other utilities">
+    ```lua
+    local utils = require 'mp.utils'
+
+    local pid = utils.getpid()
+    local env = utils.get_env_list()
+    local s   = utils.to_string({1, 2, 3})  -- convert any value to string
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## mp.input module
+
+Prompt the user for text input using the mpv console.
+
+```lua
+local input = require 'mp.input'
+
+input.get({
+    prompt = "Enter filename: ",
+    submit = function(text)
+        mp.commandv("loadfile", text)
+    end,
+})
+```
+
+### `input.get(table)` options
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `prompt` | string | Text shown before the input field |
+| `submit` | function(text) | Called when user presses Enter |
+| `edited` | function(text) | Called on each keystroke |
+| `complete` | function(text_before_cursor, respond) | Called for tab completion |
+| `closed` | function(text, cursor_pos) | Called when console closes |
+| `keep_open` | boolean | Keep console open after submit (default: `false`) |
+| `default_text` | string | Pre-fill the input field |
+| `cursor_position` | integer | Initial cursor position (1-based) |
+| `history_path` | string | Path for persisting input history |
+
+### `input.select(table)` — selection list
+
+```lua
+input.select({
+    prompt = "Choose track: ",
+    items = {"Track 1", "Track 2", "Track 3"},
+    submit = function(index)
+        mp.commandv("playlist-play-index", index - 1)
+    end,
+})
+```
+
+### Other functions
+
+| Function | Description |
+|----------|-------------|
+| `input.terminate()` | Close the active input console |
+| `input.log(message, style, terminal_style)` | Append a line to the log buffer |
+| `input.set_log(log)` | Replace the entire log buffer |
+
+---
+
+## Events reference
+
+Register handlers with `mp.register_event(name, fn)`.
+
+<CardGroup cols={2}>
+  <Card title="start-file">
+    Fired before a file starts loading. Fields: `playlist_entry_id`.
+  </Card>
+  <Card title="file-loaded">
+    Fired after a file is loaded and playback begins.
+  </Card>
+  <Card title="end-file">
+    Fired after a file is unloaded. Fields: `reason` (`eof`, `stop`, `quit`, `error`, `redirect`), `playlist_entry_id`.
+  </Card>
+  <Card title="seek">
+    Fired when the player seeks (including internal seeks).
+  </Card>
+  <Card title="playback-restart">
+    Fired at start of playback after a seek or file load.
+  </Card>
+  <Card title="shutdown">
+    Fired when mpv is quitting. Normally handled automatically.
+  </Card>
+  <Card title="log-message">
+    Fired for log messages enabled with `mp.enable_messages(level)`. Fields: `prefix`, `level`, `text`.
+  </Card>
+  <Card title="property-change">
+    Fired when an observed property changes. Fields: `name`, `data`.
+  </Card>
+  <Card title="video-reconfig">
+    Fired on video output or filter reconfiguration.
+  </Card>
+  <Card title="audio-reconfig">
+    Fired on audio output or filter reconfiguration.
+  </Card>
+</CardGroup>
+
+---
+
+## Script-opts configuration
+
+Each script can have a dedicated config file at:
+
+```
+~/.config/mpv/script-opts/<scriptname>.conf
+```
+
+Options use `key=value` syntax. `#` begins a comment. Booleans are `yes`/`no`.
+
+```ini
+# ~/.config/mpv/script-opts/exit-fullscreen-on-pause.conf
+enabled=yes
+delay=0.5
+```
+
+Read them in your script with `mp.options.read_options`.

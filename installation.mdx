@@ -1,0 +1,168 @@
+---
+title: "Installation"
+description: "How to install mpv on Linux, macOS, and Windows"
+---
+
+## System requirements
+
+Before installing, confirm your system meets the minimum requirements:
+
+- **OS**: A not-too-ancient Linux (latest distribution releases are actively supported), Windows 10 1607 or later, or macOS 10.15 (Catalina) or later.
+- **CPU**: A reasonably capable CPU. If the CPU is too slow to decode video in real time, enable hardware decoding with `--hwdec`.
+- **GPU**: A capable GPU. mpv uses shaders for video rendering and scaling rather than GPU fixed-function hardware. On low-power GPUs, use `--profile=fast` for smoother playback. On Windows, keep graphics drivers up to date.
+
+<Note>
+  mpv does not go out of its way to break on older hardware, but development is not done with it in mind. Compatibility with older setups is not guaranteed.
+</Note>
+
+## Install mpv
+
+<Tabs>
+  <Tab title="Linux">
+    mpv is packaged by all major Linux distributions. Install it through your system package manager.
+
+    <CodeGroup>
+
+    ```bash Debian / Ubuntu
+    sudo apt install mpv
+    ```
+
+    ```bash Fedora
+    sudo dnf install mpv
+    ```
+
+    ```bash Arch Linux
+    sudo pacman -S mpv
+    ```
+
+    ```bash openSUSE
+    sudo zypper install mpv
+    ```
+
+    ```bash Alpine Linux
+    sudo apk add mpv
+    ```
+
+    </CodeGroup>
+
+    <Tip>
+      Distribution packages may lag behind the upstream release. For the latest version, check your distribution's backports repository or build from source using [mpv-build](https://github.com/mpv-player/mpv-build).
+    </Tip>
+
+    After installation, verify mpv is on your `PATH`:
+
+    ```bash
+    mpv --version
+    ```
+  </Tab>
+  <Tab title="macOS">
+    The recommended way to install mpv on macOS is via [Homebrew](https://brew.sh).
+
+    <Steps>
+      <Step title="Install Homebrew">
+        If you don't already have Homebrew, install it:
+
+        ```bash
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        ```
+      </Step>
+      <Step title="Install mpv">
+        ```bash
+        brew install mpv
+        ```
+      </Step>
+      <Step title="Verify the installation">
+        ```bash
+        mpv --version
+        ```
+      </Step>
+    </Steps>
+
+    <Note>
+      macOS 10.15 (Catalina) or later is required. mpv requires a capable GPU; integrated GPUs may show tearing or stuttering on high-resolution content.
+    </Note>
+  </Tab>
+  <Tab title="Windows">
+    On Windows, mpv can be installed via package managers or downloaded as a pre-built binary.
+
+    <Steps>
+      <Step title="Choose an installation method">
+        <CodeGroup>
+
+        ```powershell winget
+        winget install mpv.mpv
+        ```
+
+        ```powershell Scoop
+        scoop install mpv
+        ```
+
+        </CodeGroup>
+
+        Alternatively, download the latest pre-built binary from the [mpv.io installation page](https://mpv.io/installation/).
+      </Step>
+      <Step title="Add mpv to your PATH (manual install only)">
+        If you downloaded the binary manually, extract the archive and add the folder containing `mpv.exe` to your `PATH` environment variable so you can run `mpv` from any terminal.
+      </Step>
+      <Step title="Verify the installation">
+        Open a command prompt or PowerShell window and run:
+
+        ```powershell
+        mpv --version
+        ```
+      </Step>
+    </Steps>
+
+    <Note>
+      Windows 10 version 1607 or later is required. Keep your graphics drivers current — outdated drivers are a common cause of video output issues on Windows.
+    </Note>
+  </Tab>
+</Tabs>
+
+## Build from source
+
+If you need the latest development version or a custom feature set, you can build mpv from source. mpv uses [Meson](https://mesonbuild.com) as its build system.
+
+<Steps>
+  <Step title="Install dependencies">
+    You need a C compiler (gcc or clang), FFmpeg libraries, libplacebo, libass, zlib, and iconv as essential dependencies. On Linux you will also need X11 or Wayland development headers and audio library headers (ALSA or PulseAudio).
+  </Step>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/mpv-player/mpv.git
+    cd mpv
+    ```
+  </Step>
+  <Step title="Configure and build">
+    ```bash
+    meson setup build
+    meson compile -C build
+    ```
+
+    To view all available build options:
+
+    ```bash
+    meson configure build
+    ```
+  </Step>
+  <Step title="Install">
+    ```bash
+    meson install -C build
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+  For a convenient way to build mpv along with FFmpeg and libass from source, use the [mpv-build](https://github.com/mpv-player/mpv-build) wrapper. It compiles FFmpeg and libass first, then statically links them into mpv.
+</Tip>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Play your first file and learn the essential controls.
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/usage/configuration">
+    Set up your `mpv.conf` and customize playback behaviour.
+  </Card>
+</CardGroup>

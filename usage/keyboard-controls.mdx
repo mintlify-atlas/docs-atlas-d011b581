@@ -1,0 +1,252 @@
+---
+title: "Keyboard Controls"
+description: "Default key bindings for controlling mpv playback"
+---
+
+mpv has a fully configurable, command-driven control layer. The default bindings listed here are hardcoded into the mpv binary. You can add or override them in `~/.config/mpv/input.conf`.
+
+<Note>
+  The listings below are not exhaustive. The authoritative source is
+  `etc/input.conf` in the mpv source tree. You can also view active bindings
+  interactively with the `?` key (see [Viewing bindings](#viewing-bindings)).
+</Note>
+
+## Seeking
+
+| Key | Action |
+|-----|--------|
+| `Right` | Seek forward 5 seconds (keyframe-limited) |
+| `Left` | Seek backward 5 seconds (keyframe-limited) |
+| `Up` | Seek forward 1 minute (keyframe-limited) |
+| `Down` | Seek backward 1 minute (keyframe-limited) |
+| `Shift+Right` | Seek forward exactly 1 second |
+| `Shift+Left` | Seek backward exactly 1 second |
+| `Shift+Up` | Seek forward exactly 5 seconds |
+| `Shift+Down` | Seek backward exactly 5 seconds |
+| `Ctrl+Right` | Seek to the next subtitle |
+| `Ctrl+Left` | Seek to the previous subtitle |
+| `Ctrl+Shift+Right` | Adjust subtitle delay so the next subtitle shows now |
+| `Ctrl+Shift+Left` | Adjust subtitle delay so the previous subtitle shows now |
+| `Home` | Seek to the beginning of the file |
+| `Page Up` | Seek to the beginning of the next chapter |
+| `Page Down` | Seek to the beginning of the previous chapter |
+| `Shift+Page Up` | Seek forward 10 minutes |
+| `Shift+Page Down` | Seek backward 10 minutes |
+| `Shift+Backspace` | Undo the last seek (only within the same playlist entry) |
+| `Shift+Ctrl+Backspace` | Mark current position for `Shift+Backspace` to return to |
+
+## Playback control
+
+| Key | Action |
+|-----|--------|
+| `p` / `Space` | Toggle pause / unpause |
+| `.` | Step forward one frame, then pause |
+| `,` | Step backward one frame, then pause |
+| `q` / `Ctrl+w` | Stop playback and quit |
+| `Q` | Quit and save current position for later resumption |
+| `Ctrl+c` | Quit with exit code 4 |
+| `ESC` | Exit fullscreen; no other effect in windowed mode |
+
+## Playback speed
+
+| Key | Action |
+|-----|--------|
+| `[` | Decrease playback speed by 10% |
+| `]` | Increase playback speed by 10% |
+| `{` | Halve playback speed |
+| `}` | Double playback speed |
+| `Backspace` | Reset playback speed to 1× |
+
+## Volume and audio
+
+| Key | Action |
+|-----|--------|
+| `9` / `/` | Decrease volume |
+| `0` / `*` | Increase volume |
+| `m` | Toggle mute |
+| `#` | Cycle through available audio tracks |
+| `Ctrl++` | Increase audio delay (A/V sync) by 0.1 s |
+| `Ctrl+-` | Decrease audio delay (A/V sync) by 0.1 s |
+
+## Video
+
+| Key | Action |
+|-----|--------|
+| `f` | Toggle fullscreen |
+| `ESC` | Leave fullscreen |
+| `T` | Toggle always-on-top |
+| `_` | Cycle through available video tracks |
+| `A` | Cycle aspect ratio override |
+| `w` / `W` | Decrease/increase pan-and-scan range |
+| `b` | Toggle debanding filter |
+| `d` | Cycle deinterlacing filter |
+| `E` | Cycle through available editions |
+| `Ctrl+h` | Toggle hardware video decoding |
+| `Alt+Left/Right/Up/Down` | Pan the video |
+| `Alt++` / `Alt+-` | Zoom in/out |
+| `Alt+Backspace` | Reset pan and zoom |
+| `Alt+0` | Resize window to half its original size |
+| `Alt+1` | Resize window to its original size |
+| `Alt+2` | Resize window to double its original size |
+
+### Color adjustments
+
+These keys are only effective when the video output supports the corresponding adjustment:
+
+| Key | Action |
+|-----|--------|
+| `1` / `2` | Adjust contrast |
+| `3` / `4` | Adjust brightness |
+| `5` / `6` | Adjust gamma |
+| `7` / `8` | Adjust saturation |
+
+## Subtitles
+
+| Key | Action |
+|-----|--------|
+| `j` | Cycle forward through subtitle tracks |
+| `J` | Cycle backward through subtitle tracks |
+| `v` | Toggle subtitle visibility |
+| `Alt+v` | Toggle secondary subtitle visibility |
+| `z` / `Z` | Shift subtitle timing −/+ 0.1 seconds |
+| `r` / `R` | Move subtitles up/down |
+| `G` / `F` | Increase/decrease subtitle font size by 10% |
+| `u` | Toggle subtitle style override (apply `--sub-ass-*` overrides vs. override fully) |
+| `V` | Cycle which video data is used for ASS rendering |
+
+## Screenshots
+
+| Key | Action |
+|-----|--------|
+| `s` | Screenshot at original resolution, with subtitles |
+| `S` | Screenshot at original resolution, without subtitles |
+| `Ctrl+s` | Screenshot of the window as displayed (with OSD and scaling) |
+| `Alt+s` | Screenshot every frame (press again to stop) |
+
+## Playlist navigation
+
+| Key | Action |
+|-----|--------|
+| `>` | Go to the next playlist entry |
+| `<` | Go to the previous playlist entry |
+| `Enter` | Go to the next playlist entry |
+| `Shift+Home` | Jump to the first playlist entry |
+| `Shift+End` | Jump to the last playlist entry |
+| `l` | Set or clear A-B loop points |
+| `L` | Toggle infinite looping of the current file |
+| `F8` | Show the playlist and current position |
+
+## OSD and info
+
+| Key | Action |
+|-----|--------|
+| `o` / `P` | Show progress bar, elapsed time, and total duration |
+| `O` | Toggle OSD between normal and always-on playback time |
+| `i` | Show playback statistics overlay |
+| `I` | Toggle statistics overlay |
+| `?` | Toggle key bindings overlay |
+| `` ` `` | Open the console |
+| `F9` | Show the list of audio, video, and subtitle tracks |
+| `DEL` | Cycle OSC visibility: never / auto / always |
+
+## Interactive track and playlist selection (g- prefix)
+
+These bindings open an interactive menu in the console for selecting from a list:
+
+| Key | Action |
+|-----|--------|
+| `g-p` | Select a playlist entry |
+| `g-s` | Select a subtitle track |
+| `g-S` | Select a secondary subtitle track |
+| `g-a` | Select an audio track |
+| `g-v` | Select a video track |
+| `g-t` | Select a track of any type |
+| `g-c` | Select a chapter |
+| `g-e` | Select an MKV edition or DVD/Blu-ray title |
+| `g-l` | Select a subtitle line to seek to (requires `ffmpeg` in PATH) |
+| `g-d` | Select an audio device |
+| `g-h` | Select a file from the watch history (requires `--save-watch-history`) |
+| `g-w` | Select a file from watch-later config files to resume |
+| `g-b` | Select a defined input binding |
+| `g-r` | Show all property values |
+| `g-m` / `Ctrl+p` | Open the miscellaneous menu |
+
+Navigate the menu with `Down`/`Ctrl+n` (down), `Up`/`Ctrl+p` (up), `Page Down`/`Ctrl+f` (page down), `Page Up`/`Ctrl+b` (page up). Selecting the active track in a track menu disables it.
+
+## Multimedia keys
+
+| Key | Action |
+|-----|--------|
+| `Pause` | Pause |
+| `Stop` | Stop and quit |
+| `Previous` / `Next` | Seek backward/forward 1 minute |
+| `Volume Up` / `Volume Down` | Adjust volume |
+| `Mute` | Toggle mute |
+
+## Context menu
+
+| Key | Action |
+|-----|--------|
+| `MENU` / `Shift+F10` | Open the context menu |
+
+## Mouse controls
+
+| Action | Effect |
+|--------|--------|
+| Left double-click | Toggle fullscreen |
+| Right click | Toggle pause |
+| Scroll wheel up/down | Adjust volume |
+| Scroll wheel left/right | Seek backward/forward 10 seconds |
+| Ctrl+scroll wheel up/down | Zoom in/out, keeping the hovered position fixed |
+| Forward/Back buttons | Next/previous playlist entry |
+| Ctrl+left click and drag | Pan the video, keeping the clicked point under the cursor |
+
+## Viewing bindings
+
+Press `?` during playback to toggle an overlay showing all currently active key bindings. This is provided by the built-in `stats` script.
+
+You can also run mpv in binding test mode to inspect what any key does:
+
+```bash
+mpv --input-test --force-window --idle
+```
+
+Press any key in the window and mpv prints the binding details to the terminal.
+
+## Custom bindings in input.conf
+
+Create or edit `~/.config/mpv/input.conf` to add or override bindings. Each line has the form:
+
+```
+KEY COMMAND [# comment]
+```
+
+<CodeGroup>
+
+```ini ~/.config/mpv/input.conf
+# Increase/decrease volume with +/-
++  add volume  5
+-  add volume -5
+
+# Jump forward/backward 90 seconds with Ctrl+arrow
+Ctrl+RIGHT seek  90
+Ctrl+LEFT  seek -90
+
+# Toggle hardware decoding
+h cycle-values hwdec no auto
+
+# Bind SHARP (#) to toggle mute (SHARP is the literal key name for #)
+SHARP cycle mute
+
+# Ignore the g key so the g-* bindings still work without triggering anything
+g ignore
+```
+
+</CodeGroup>
+
+<Tip>
+  Use `ignore` to fully unbind a key: `ctrl+a ignore`. Disable all default
+  bindings with `--no-input-default-bindings` and define everything yourself.
+</Tip>
+
+Key modifier names are `Shift`, `Ctrl`, `Alt`, and `Meta`. Combine them with `+`, for example `Ctrl+Alt+x`.

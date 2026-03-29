@@ -1,0 +1,410 @@
+---
+title: "JavaScript Scripting"
+description: "Write mpv scripts in JavaScript — similarities to Lua, differences, and JS-specific APIs"
+---
+
+mpv supports JavaScript scripts via the MuJS embedded interpreter (ECMAScript 5). The JavaScript scripting interface is nearly identical to the Lua interface — the same `mp`, `mp.utils`, `mp.msg`, `mp.options`, and `mp.input` modules are available with the same APIs. This page covers the differences and JavaScript-specific additions.
+
+<Note>
+  This page focuses on what is different from Lua scripting. Refer to the [Lua scripting reference](/scripting/lua-scripting) for full API documentation.
+</Note>
+
+## Script location
+
+Use the `.js` extension. Everything else — script directories, `main.js` entry points, loading from `~/.config/mpv/scripts/`, and the `--script` flag — is the same as Lua.
+
+```
+~/.config/mpv/scripts/
+├── my-lua-script.lua
+├── my-js-script.js
+└── my-js-dir/
+    └── main.js
+```
+
+## Quick example
+
+A script that exits fullscreen whenever playback is paused:
+
+```javascript
+function on_pause_change(name, value) {
+    if (value == true)
+        mp.set_property("fullscreen", "no");
+}
+mp.observe_property("pause", "bool", on_pause_change);
+```
+
+---
+
+## Differences from Lua
+
+### No module imports required
+
+All modules are preloaded. There is no `require` call needed to access `mp`, `mp.utils`, `mp.msg`, `mp.options`, or `mp.input`:
+
+```javascript
+// Lua: local utils = require 'mp.utils'
+// JS: just use it directly
+var cwd = mp.utils.getcwd();
+```
+
+### Error handling
+
+Where Lua returns `nil, error` on failure, JavaScript returns `undefined` and makes the error available via `mp.last_error()`:
+
+```javascript
+var value = mp.get_property("nonexistent-property");
+if (value === undefined) {
+    mp.msg.warn("error: " + mp.last_error());
+}
+```
+
+API functions marked with `(LE)` support this pattern. An empty string from `mp.last_error()` means success.
+
+### Standard JS APIs replace some Lua equivalents
+
+| Lua | JavaScript |
+|-----|------------|
+| `mp.add_timeout(seconds, fn)` | `id = setTimeout(fn, ms)` |
+| `mp.add_periodic_timer(seconds, fn)` | `id = setInterval(fn, ms)` |
+| `utils.parse_json(str)` | `JSON.parse(str)` |
+| `utils.format_json(v)` | `JSON.stringify(v)` |
+| `utils.to_string(v)` | `dump(v)` |
+| `mp.get_next_timeout()` | see event loop |
+| `mp.dispatch_events()` | see event loop |
+
+### No standard library
+
+There is no access to `fs`, `process`, or other Node.js-style built-ins. Filesystem interaction goes through `mp.utils`, and subprocess execution through `mp.command_native`.
+
+### Language features: ECMAScript 5
+
+The MuJS interpreter implements ES5. Standard ES5 methods like `String.prototype.substring` work; non-standard extensions like `String.prototype.substr` do not. Consult the [MuJS documentation](https://mujs.com) for details.
+
+---
+
+## Timers
+
+Standard HTML/Node.js-style timers are available globally:
+
+```javascript
+// One-shot timer
+var id = setTimeout(function() {
+    mp.msg.info("fired after 2 seconds");
+}, 2000);
+
+// Repeating timer
+var count = 0;
+var intervalId = setInterval(function() {
+    count += 1;
+    mp.msg.info("tick " + count);
+    if (count >= 5) {
+        clearInterval(intervalId);
+    }
+}, 1000);
+
+// Cancel a timer
+clearTimeout(id);
+```
+
+All signatures:
+
+```javascript
+id = setTimeout(fn [, duration_ms [, arg1 [, arg2 ...]]])
+id = setTimeout(code_string [, duration_ms])
+clearTimeout(id)
+
+id = setInterval(fn [, duration_ms [, arg1 [, arg2 ...]]])
+id = setInterval(code_string [, duration_ms])
+clearInterval(id)
+```
+
+`duration` defaults to 0. Timers always fire asynchronously — `setTimeout(fn)` will never call `fn` before returning, and `setInterval` never fires twice in the same event loop iteration.
+
+<Tip>
+  `setTimeout(fn)` with no duration (or duration 0) fires at the end of the current event loop iteration. This makes it useful as a one-time idle observer.
+</Tip>
+
+---
+
+## CommonJS modules and `require`
+
+mpv's JavaScript supports CommonJS-style modules. A module is a `.js` file that assigns properties to its pre-existing `exports` object:
+
+```javascript
+// mymodule.js
+exports.greet = function(name) {
+    return "Hello, " + name + "!";
+};
+```
+
+```javascript
+// main.js
+var mymod = require("./mymodule");
+mp.msg.info(mymod.greet("mpv"));
+```
+
+### Module resolution
+
+- Paths starting with `./` or `../` are relative to the calling script.
+- Absolute paths (e.g. `~/foo` or `/usr/local/lib/foo`) are resolved directly.
+- All other IDs are looked up as global module IDs in `mp.module_paths`.
+
+A `.js` extension is always appended to the ID. For example, `require("./foo")` loads `./foo.js`.
+
+### `mp.module_paths`
+
+A global array of directories searched for top-level module IDs. Empty by default, except for directory scripts where it includes `<script-dir>/modules/`.
+
+```javascript
+// In init.js (global init file, see below):
+mp.module_paths.push("/usr/local/lib/mpv-modules");
+```
+
+### Notes
+
+- Modules are cached: calling `require` for the same ID twice returns the same `exports` object.
+- `global` is not defined, but the top-level `this` is the global object.
+- Functions and variables declared at the module level do not pollute the global object.
+- Some Node.js-compatible modules with minimal dependencies may work, but most will not.
+
+---
+
+## Custom initialization
+
+Before loading any script, mpv looks for `init.js` in the mpv configuration directory (e.g. `~/.config/mpv/init.js`). Code there runs in the same environment as scripts and can modify global state for all scripts, such as adding to `mp.module_paths`:
+
+```javascript
+// ~/.config/mpv/init.js
+mp.module_paths.push("/usr/local/lib/mpv-modules");
+```
+
+<Warning>
+  Do not overwrite `mp.module_paths` entirely (`mp.module_paths = [...]`). Use `push` to add paths, or you will remove the `<script-dir>/modules` path set for directory scripts.
+</Warning>
+
+The init file is ignored when mpv is started with `--no-config`.
+
+---
+
+## Additional JavaScript-only APIs
+
+### `mp.last_error()`
+
+Returns an empty string if the last `(LE)`-marked API call succeeded, or a non-empty error reason string on failure.
+
+```javascript
+mp.set_property("volume", "80");
+if (mp.last_error() !== "") {
+    mp.msg.error("set_property failed: " + mp.last_error());
+}
+```
+
+### `print` and `dump`
+
+```javascript
+print("hello");           // alias for mp.msg.info
+dump({a: 1, b: [2, 3]}); // like print but recursively expands objects/arrays
+```
+
+### `Error.stack`
+
+Stack traces are available inside `catch` blocks when the error was created with the `Error` constructor:
+
+```javascript
+try {
+    throw new Error("something broke");
+} catch(e) {
+    mp.msg.error(e.stack);
+}
+```
+
+### `exit()`
+
+Exits the script at the end of the current event loop iteration (registered for the `shutdown` event). Does not terminate mpv or other scripts.
+
+### `mp.get_time_ms()`
+
+Same as `mp.get_time()` but returns milliseconds instead of seconds.
+
+### `mp.get_script_file()`
+
+Returns the filename of the current script.
+
+### `mp.utils.getenv(name)`
+
+Returns the value of an environment variable, or `undefined` if not set.
+
+```javascript
+var home = mp.utils.getenv("HOME");
+```
+
+### `mp.utils.get_user_path(path)`
+
+Expands mpv meta-paths (like `~~desktop/` or `~~home/`) into a platform-specific filesystem path.
+
+### File I/O
+
+```javascript
+// Read a file (optional max bytes)
+var content = mp.utils.read_file("/tmp/foo.txt");
+var partial = mp.utils.read_file("/tmp/foo.txt", 1024);
+
+// Write a file (must use file:// prefix)
+mp.utils.write_file("file:///tmp/output.txt", "hello world");
+
+// Append to a file
+mp.utils.append_file("file:///tmp/output.txt", "\nmore text");
+```
+
+`read_file`, `write_file`, and `append_file` expand mpv meta-paths internally and throw on errors. They handle text content only.
+
+### `mp.utils.compile_js(fname, content_str)`
+
+Compiles JavaScript source code from a string without loading from the filesystem. Returns a callable function:
+
+```javascript
+var fn = mp.utils.compile_js("myscript.js", "mp.msg.info('hello')");
+fn();
+```
+
+---
+
+## Scripting API quick reference
+
+All of the following are available to JavaScript with the same behavior as Lua. Functions marked `(LE)` support `mp.last_error()` for error checking.
+
+<Tabs>
+  <Tab title="Commands">
+    ```javascript
+    mp.command(string)                    // (LE)
+    mp.commandv(arg1, arg2, ...)          // (LE)
+    mp.command_native(table [, def])      // (LE)
+    id = mp.command_native_async(table [, fn])  // (LE)
+    mp.abort_async_command(id)
+    ```
+  </Tab>
+  <Tab title="Properties">
+    ```javascript
+    mp.get_property(name [, def])         // (LE)
+    mp.get_property_osd(name [, def])     // (LE)
+    mp.get_property_bool(name [, def])    // (LE)
+    mp.get_property_number(name [, def])  // (LE)
+    mp.get_property_native(name [, def])  // (LE)
+    mp.set_property(name, value)          // (LE)
+    mp.set_property_bool(name, value)     // (LE)
+    mp.set_property_number(name, value)   // (LE)
+    mp.set_property_native(name, value)   // (LE)
+    mp.del_property(name)                 // (LE)
+    mp.observe_property(name, type, fn)
+    mp.unobserve_property(fn)
+    ```
+  </Tab>
+  <Tab title="Events & bindings">
+    ```javascript
+    mp.register_event(name, fn)
+    mp.unregister_event(fn)
+    mp.add_key_binding(key, name_or_fn [, fn [, flags]])
+    mp.add_forced_key_binding(...)
+    mp.remove_key_binding(name)
+    mp.register_script_message(name, fn)
+    mp.unregister_script_message(name)
+    mp.register_idle(fn)
+    mp.unregister_idle(fn)
+    mp.add_hook(type, priority, fn)
+    ```
+  </Tab>
+  <Tab title="Utilities">
+    ```javascript
+    mp.get_time()
+    mp.get_time_ms()
+    mp.get_script_name()
+    mp.get_script_directory()
+    mp.get_script_file()
+    mp.get_opt(key)
+    mp.osd_message(text [, duration])
+    mp.enable_messages(level)
+    mp.create_osd_overlay(format)
+    mp.get_osd_size()   // returns {width, height, aspect}
+    mp.get_wakeup_pipe()
+    exit()
+    ```
+  </Tab>
+  <Tab title="mp.utils">
+    ```javascript
+    mp.utils.getcwd()                     // (LE)
+    mp.utils.readdir(path [, filter])     // (LE)
+    mp.utils.file_info(path)              // (LE)
+    mp.utils.split_path(path)
+    mp.utils.join_path(p1, p2)
+    mp.utils.subprocess(t)
+    mp.utils.subprocess_detached(t)
+    mp.utils.get_env_list()
+    mp.utils.getpid()                     // (LE)
+    mp.utils.getenv(name)
+    mp.utils.get_user_path(path)
+    mp.utils.read_file(fname [, max])
+    mp.utils.write_file(fname, str)
+    mp.utils.append_file(fname, str)
+    mp.utils.compile_js(fname, content)
+    ```
+  </Tab>
+  <Tab title="mp.msg">
+    ```javascript
+    mp.msg.log(level, ...)
+    mp.msg.fatal(...)
+    mp.msg.error(...)
+    mp.msg.warn(...)
+    mp.msg.info(...)
+    mp.msg.verbose(...)
+    mp.msg.debug(...)
+    mp.msg.trace(...)
+    ```
+  </Tab>
+  <Tab title="mp.options / mp.input">
+    ```javascript
+    mp.options.read_options(obj [, id [, on_update]])
+    mp.input.get(obj)
+    mp.input.select(obj)
+    mp.input.terminate()
+    mp.input.log(message, style)
+    mp.input.set_log(log)
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## The event loop
+
+The built-in event loop polls mpv events, processes timers, and waits for new events. You can replace it by defining a global `mp_event_loop` function:
+
+```javascript
+function mp_event_loop() {
+    var wait = 0;
+    do {
+        var e = mp.wait_event(wait);
+        dump(e);  // prints every event
+        if (e.event != "none") {
+            mp.dispatch_event(e);
+            wait = 0;
+        } else {
+            wait = mp.process_timers() / 1000;
+            if (wait != 0) {
+                mp.notify_idle_observers();
+                wait = mp.peek_timers_wait() / 1000;
+            }
+        }
+    } while (mp.keep_running);
+}
+```
+
+| Function | Description |
+|----------|-------------|
+| `mp.wait_event(wait)` | Block for up to `wait` seconds, returns next event or `{event: "none"}` |
+| `mp.dispatch_event(e)` | Call registered handlers for the given event |
+| `mp.process_timers()` | Fire due timers; returns ms until next timer, or -1 |
+| `mp.notify_idle_observers()` | Call idle observers (call before sleeping) |
+| `mp.peek_timers_wait()` | Like `mp.process_timers()` but without firing |
+| `mp.keep_running` | Set to `false` to exit the loop |
+
+`exit()` is internally registered for the `shutdown` event and sets `mp.keep_running = false`.

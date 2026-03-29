@@ -1,0 +1,246 @@
+---
+title: "Audio Output"
+description: "Configure audio output drivers for Linux, macOS, and Windows"
+---
+
+Audio output drivers are interfaces to different audio output facilities. mpv auto-selects the best available driver, but you can override it with `--ao`.
+
+```bash
+mpv --ao=<driver> audio.flac
+```
+
+Pass a comma-separated priority list to fall back automatically:
+
+```bash
+mpv --ao=pipewire,pulse,alsa audio.flac
+```
+
+<Tip>Run `mpv --ao=help` to list all compiled-in audio output drivers sorted by autoprobe order.</Tip>
+
+<Note>The default audio output driver is subject to change and must not be relied upon. Specify the driver explicitly if a particular AO is required.</Note>
+
+## Platform drivers
+
+<Tabs>
+  <Tab title="Linux">
+    ### alsa
+
+    ALSA audio output driver.
+
+    ```bash
+    mpv --ao=alsa audio.flac
+    ```
+
+    | Option | Description |
+    |---|---|
+    | `--alsa-resample=yes` | Enable ALSA resampling plugin (disabled by default; some drivers report incorrect delay) |
+    | `--alsa-mixer-device=<device>` | Mixer device for volume control (default: `default`) |
+    | `--alsa-mixer-name=<name>` | Mixer element name, e.g. `Master` or `PCM` (default: `Master`) |
+    | `--alsa-mixer-index=<number>` | Mixer channel index (default: 0) |
+    | `--alsa-non-interleaved` | Allow non-interleaved audio output (disabled by default due to broken plugins) |
+    | `--alsa-ignore-chmap` | Don't read or set channel map; pass audio as-is |
+    | `--alsa-buffer-time=<microseconds>` | Requested buffer time (0 = use ALSA default) |
+    | `--alsa-periods=<number>` | Number of ALSA periods requested |
+
+    <Warning>
+      To get multichannel/surround audio, use `--audio-channels=auto`. The default `auto-safe` explicitly rejects multichannel output because ALSA has no way to detect supported channel layouts.
+    </Warning>
+
+    ### pulse (PulseAudio)
+
+    ```bash
+    mpv --ao=pulse audio.flac
+    ```
+
+    | Option | Description |
+    |---|---|
+    | `--pulse-host=<host>` | Host to connect to (empty = local connection) |
+    | `--pulse-buffer=<1-2000\|native>` | Audio buffer size in milliseconds; `native` lets the server decide |
+    | `--pulse-latency-hacks=<yes\|no>` | Enable latency workarounds for PulseAudio timing bugs (default: yes) |
+    | `--pulse-allow-suspended=<yes\|no>` | Allow playback even if the sink is suspended (default: no) |
+
+    ### pipewire
+
+    ```bash
+    mpv --ao=pipewire audio.flac
+    ```
+
+    | Option | Description |
+    |---|---|
+    | `--pipewire-buffer=<1-2000\|native>` | Audio buffer size in milliseconds |
+    | `--pipewire-remote=<remote>` | PipeWire remote daemon name (default: `pipewire-0`) |
+    | `--pipewire-volume-mode=<channel\|global>` | Whether `ao-volume` controls channel or global volume (default: channel) |
+
+    ### jack (JACK Audio Connection Kit)
+
+    ```bash
+    mpv --ao=jack audio.flac
+    ```
+
+    | Option | Description |
+    |---|---|
+    | `--jack-port=<name>` | Connect to ports with this name (default: physical ports) |
+    | `--jack-name=<client>` | JACK client name (default: `mpv`) |
+    | `--jack-autostart=<yes\|no>` | Auto-start jackd if needed (default: no; tends to be unreliable) |
+    | `--jack-connect=<yes\|no>` | Auto-connect to output ports (default: yes) |
+    | `--jack-std-channel-layout=<waveext\|any>` | Channel layout standard: `waveext` (WAVE_FORMAT_EXTENSIBLE order, default) or `any` |
+  </Tab>
+  <Tab title="macOS">
+    ### coreaudio
+
+    Native macOS audio output using AudioUnits and the CoreAudio sound server. Automatically redirects to `coreaudio_exclusive` for compressed formats.
+
+    ```bash
+    mpv --ao=coreaudio audio.flac
+    ```
+
+    | Option | Description |
+    |---|---|
+    | `--coreaudio-change-physical-format=<yes\|no>` | Change system-wide audio format to match requested format (default: no). Enables multichannel output but affects system audio settings. |
+    | `--coreaudio-spdif-hack=<yes\|no>` | Try to pass AC3/DTS as PCM for drivers that don't report AC3 support. Use with care. |
+
+    ### coreaudio_exclusive
+
+    Native macOS audio using direct device access in exclusive mode, bypassing the sound server.
+
+    ```bash
+    mpv --ao=coreaudio_exclusive audio.flac
+    ```
+
+    ### avfoundation
+
+    Native macOS audio using `AVSampleBufferAudioRenderer` in AVFoundation. Supports spatial audio.
+
+    ```bash
+    mpv --ao=avfoundation audio.flac
+    ```
+
+    <Warning>Enabling spatial audio may hang playback if mpv is not started from an app bundle.</Warning>
+  </Tab>
+  <Tab title="Windows">
+    ### wasapi
+
+    Audio output to the Windows Audio Session API.
+
+    ```bash
+    mpv --ao=wasapi audio.flac
+    ```
+
+    | Option | Description |
+    |---|---|
+    | `--wasapi-exclusive-buffer=<default\|min\|1-2000000>` | Buffer duration in exclusive mode (`--audio-exclusive=yes`). `default` and `min` use the device's default/minimum period. Accepts microseconds directly. |
+
+    WASAPI supports exclusive mode for lower latency:
+
+    ```bash
+    mpv --ao=wasapi --audio-exclusive=yes audio.flac
+    ```
+
+    ### dsound (DirectSound)
+
+    Available on older Windows systems.
+  </Tab>
+  <Tab title="Cross-platform">
+    ### null
+
+    Produces no audio output but maintains video playback timing. Useful for benchmarking.
+
+    ```bash
+    mpv --ao=null video.mkv
+
+    # Untimed: audio decodes as fast as possible
+    mpv --ao=null --ao-null-untimed video.mkv
+    ```
+
+    ### sdl
+
+    SDL 2.0+ audio output. Works on any platform supported by SDL 2.0. For compatibility with environments where other drivers are unavailable.
+
+    ```bash
+    mpv --ao=sdl audio.flac
+    ```
+
+    | Option | Description |
+    |---|---|
+    | `--sdl-buflen=<seconds>` | Audio buffer length hint in seconds (0 = system default) |
+  </Tab>
+</Tabs>
+
+## Audio channel layout
+
+Control the output channel layout with `--audio-channels`:
+
+```bash
+# Accept any channel layout the audio output supports
+mpv --audio-channels=auto audio.flac
+
+# Safe subset only (default)
+mpv --audio-channels=auto-safe audio.flac
+
+# Force stereo
+mpv --audio-channels=stereo audio.flac
+```
+
+## ReplayGain / volume normalization
+
+Adjust volume based on ReplayGain metadata stored in the file:
+
+```bash
+# Apply track gain
+mpv --replaygain=track audio.flac
+
+# Apply album gain (falls back to track gain if absent)
+mpv --replaygain=album audio.flac
+
+# Disable (default)
+mpv --replaygain=no audio.flac
+```
+
+Additional ReplayGain options:
+
+| Option | Description |
+|---|---|
+| `--replaygain-preamp=<db>` | Pre-amplification in dB applied to the selected gain (default: 0) |
+| `--replaygain-clip=<yes\|no>` | Allow clipping (default: no; mpv auto-lowers gain to prevent clipping) |
+| `--replaygain-fallback=<db>` | Gain in dB to apply when no ReplayGain tags are present |
+
+## Compressed audio passthrough (S/PDIF / HDMI)
+
+Pass compressed audio formats directly to a receiver via S/PDIF or HDMI:
+
+```bash
+# Pass through AC-3 and DTS
+mpv --audio-spdif=ac3,dts audio.mkv
+
+# Pass through Dolby TrueHD and E-AC-3
+mpv --audio-spdif=truehd,eac3 audio.mkv
+```
+
+Supported codecs: `ac3`, `dts`, `dts-hd`, `eac3`, `truehd`.
+
+<Warning>
+  HDMI supports uncompressed multichannel PCM, and mpv supports lossless DTS-HD decoding via FFmpeg's DCA decoder. Passthrough is rarely necessary on modern systems.
+</Warning>
+
+## Exclusive output mode
+
+Lock the audio device so only mpv can use it (lower latency, no mixing):
+
+```bash
+mpv --audio-exclusive=yes audio.flac
+```
+
+Supported by `wasapi`, `coreaudio`, `pipewire`, and `audiounit`.
+
+## Selecting a specific audio device
+
+```bash
+# List available devices
+mpv --audio-device=help
+
+# Use a specific ALSA device
+mpv --audio-device=alsa/dmix:default audio.flac
+
+# Use a specific WASAPI device
+mpv --audio-device=wasapi/Speakers audio.flac
+```

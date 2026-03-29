@@ -1,24 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "name": "mpv",
+  "projectType": "cli-tool",
+  "projectName": "mpv",
+  "projectDescription": "A powerful, free, and open-source command-line media player supporting a wide variety of video, audio, and subtitle formats with advanced scripting and embedding capabilities.",
   "theme": "palm",
-  "colors": {
-    "primary": "#522859",
-    "light": "#ac94b0",
-    "dark": "#d2cfd3"
-  },
-  "favicon": "https://media.brand.dev/46736330-1779-49d0-9da6-0a7b653d0007.png",
-  "navbar": {
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/mpv-player/mpv"
-    }
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/mpv-player/mpv"
-    }
-  },
+  "primaryColor": "#522859",
+  "lightColor": "#ac94b0",
+  "darkColor": "#d2cfd3",
   "navigation": {
     "tabs": [
       {
@@ -92,5 +79,29 @@
         ]
       }
     ]
-  }
+  },
+  "keyFeatures": [
+    "Supports a wide variety of video and audio formats via FFmpeg",
+    "Highly configurable via command-line options and config files",
+    "Lua and JavaScript scripting API for extending player functionality",
+    "JSON IPC protocol for external control of the player",
+    "libmpv C API for embedding in other applications",
+    "Hardware-accelerated video decoding (VDPAU, VAAPI, NVDEC, etc.)",
+    "GPU-accelerated video rendering with shader support (gpu-next/gpu VO)",
+    "On-Screen Controller (OSC) for mouse-based control",
+    "Subtitle rendering and synchronization support",
+    "Cross-platform: Linux, Windows, macOS"
+  ],
+  "publicApiSurface": [
+    "mpv [options] [file|URL|PLAYLIST|-]",
+    "--vo=<driver> (video output: gpu-next, gpu, xv, null, ...)",
+    "--ao=<driver> (audio output: alsa, pulse, coreaudio, wasapi, ...)",
+    "--vf=<filter-chain> (video filters)",
+    "--af=<filter-chain> (audio filters)",
+    "--script=<path> (load Lua/JS script)",
+    "--input-ipc-server=<socket> (JSON IPC control socket)",
+    "libmpv C API: mpv_create(), mpv_initialize(), mpv_command(), mpv_set_property(), mpv_get_property(), mpv_wait_event()",
+    "Lua scripting: mp.command(), mp.get_property(), mp.set_property(), mp.observe_property(), mp.add_key_binding()",
+    "JavaScript scripting: mp.command(), mp.get_property(), mp.set_property(), mp.observe_property()"
+  ]
 }
